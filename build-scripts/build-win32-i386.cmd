@@ -10,13 +10,13 @@ for %%a in (%list%) do (
   cd openssl-openssl-%%a
   perl Configure VC-WIN32-HYBRIDCRT
   nmake
-  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win32.zip *.dll
-  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win32.zip LICENSE.txt
+  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win32-i386.zip *.dll
+  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win32-i366.zip LICENSE.txt
   cd apps
-  "%ProgramFiles%\7-Zip\7z" a ../openssl-%%a-win32.zip openssl.exe
+  "%ProgramFiles%\7-Zip\7z" a ../openssl-%%a-win32-i386.zip openssl.exe
   cd ..
-  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win32.zip providers/*.dll
-  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win32.zip engines/*.dll
+  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win32-i386.zip providers/*.dll
+  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win32-i386.zip engines/*.dll
   copy *.zip ..
   del *.zip
   cd ..

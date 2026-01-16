@@ -8,15 +8,15 @@ for %%a in (%list%) do (
   curl -sLo openssl-%%a.tar.gz https://github.com/openssl/openssl/archive/refs/tags/openssl-%%a.tar.gz
   tar zxf openssl-%%a.tar.gz
   cd openssl-openssl-%%a
-  perl Configure VC-WIN64A-HYBRIDCRT
+  perl Configure VC-win64-86_64A-HYBRIDCRT
   nmake
-  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win64.zip *.dll
-  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win64.zip LICENSE.txt
+  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win64-86_64.zip *.dll
+  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win64-86_64.zip LICENSE.txt
   cd apps
-  "%ProgramFiles%\7-Zip\7z" a ../openssl-%%a-win64.zip openssl.exe
+  "%ProgramFiles%\7-Zip\7z" a ../openssl-%%a-win64-86_64.zip openssl.exe
   cd ..
-  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win64.zip providers/*.dll
-  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win64.zip engines/*.dll
+  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win64-86_64.zip providers/*.dll
+  "%ProgramFiles%\7-Zip\7z" a openssl-%%a-win64-86_64.zip engines/*.dll
   copy *.zip ..
   del *.zip
   cd ..
