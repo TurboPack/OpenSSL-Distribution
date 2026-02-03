@@ -35,7 +35,7 @@ jobs:
             setup_cmd: sudo apt-get update && sudo apt-get install -y build-essential
 
           # macOS x64 (Intel)
-          - os: macos-13 # Intel runner
+          - os: macos-14-intel # Intel runner
             arch: x64
             target: darwin64-x86_64-cc
             setup_cmd: echo "Setup Mac Intel"
@@ -67,10 +67,20 @@ jobs:
       # ------------------------------------------------------------------------
       # BUILD 1: SHARED LIBRARIES (.dll / .so / .dylib)
       # ------------------------------------------------------------------------
-      - name: Configure Shared
+      
+      - name: Configure Shared (Windows)
+        if: runner.os == 'Windows'
         working-directory: src
+        # Note: We use "CFLAGS=..." to force Static CRT (/MT)
         run: |
-          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests /MT
+          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests "CFLAGS=/nologo /O2 /MT"
+
+      - name: Configure Shared (Linux/macOS)
+        if: runner.os != 'Windows'
+        working-directory: src
+        # Note: No /MT here. Standard GCC/Clang flags apply.
+        run: |
+          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests
 
       - name: Build Shared
         working-directory: src
@@ -97,10 +107,18 @@ jobs:
       # ------------------------------------------------------------------------
       # BUILD 2: STATIC LIBRARIES (.lib / .a)
       # ------------------------------------------------------------------------
-      - name: Configure Static
+      
+      - name: Configure Static (Windows)
+        if: runner.os == 'Windows'
         working-directory: src
         run: |
-          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/static no-shared no-tests /MT
+          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/static no-shared no-tests "CFLAGS=/nologo /O2 /MT"
+
+      - name: Configure Static (Linux/macOS)
+        if: runner.os != 'Windows'
+        working-directory: src
+        run: |
+          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/static no-shared no-tests
 
       - name: Build Static
         working-directory: src
@@ -113,7 +131,7 @@ jobs:
             make install_sw
           fi
         shell: bash
-
+        
       # ------------------------------------------------------------------------
       # PACKAGING
       # ------------------------------------------------------------------------
