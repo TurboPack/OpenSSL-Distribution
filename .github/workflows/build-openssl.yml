@@ -35,7 +35,7 @@ jobs:
             setup_cmd: sudo apt-get update && sudo apt-get install -y build-essential
 
           # macOS x64 (Intel)
-          - os: macos-14-intel # Intel runner
+          - os: macos-13-intel # Intel runner
             arch: x64
             target: darwin64-x86_64-cc
             setup_cmd: echo "Setup Mac Intel"
@@ -68,69 +68,65 @@ jobs:
       # BUILD 1: SHARED LIBRARIES (.dll / .so / .dylib)
       # ------------------------------------------------------------------------
       
-      - name: Configure Shared (Windows)
+# ------------------------------------------------------------------------
+      # BUILD SHARED
+      # ------------------------------------------------------------------------
+      
+      # Windows: Use CMD to ensure 'link.exe' is the MSVC linker
+      - name: Build Shared (Windows)
         if: runner.os == 'Windows'
         working-directory: src
-        # Note: We use "CFLAGS=..." to force Static CRT (/MT)
+        shell: cmd
         run: |
-          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests "CFLAGS=/nologo /O2 /MT"
+          nmake
+          nmake install
 
-      - name: Configure Shared (Linux/macOS)
+      # Linux/macOS: Use Bash
+      - name: Build Shared (Unix)
         if: runner.os != 'Windows'
         working-directory: src
-        # Note: No /MT here. Standard GCC/Clang flags apply.
-        run: |
-          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests
-
-      - name: Build Shared
-        working-directory: src
-        run: |
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            nmake
-            nmake install
-          else
-            make -j4
-            make install_sw
-          fi
         shell: bash
-
-      - name: Clean Source
-        working-directory: src
         run: |
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            nmake clean
-          else
-            make clean
-          fi
+          make -j4
+          make install_sw
+
+      # ------------------------------------------------------------------------
+      # CLEAN
+      # ------------------------------------------------------------------------
+
+      - name: Clean Source (Windows)
+        if: runner.os == 'Windows'
+        working-directory: src
+        shell: cmd
+        run: nmake clean
+
+      - name: Clean Source (Unix)
+        if: runner.os != 'Windows'
+        working-directory: src
         shell: bash
+        run: make clean
 
       # ------------------------------------------------------------------------
       # BUILD 2: STATIC LIBRARIES (.lib / .a)
       # ------------------------------------------------------------------------
       
-      - name: Configure Static (Windows)
+      # Windows: Use CMD
+      - name: Build Static (Windows)
         if: runner.os == 'Windows'
         working-directory: src
+        shell: cmd
         run: |
-          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/static no-shared no-tests "CFLAGS=/nologo /O2 /MT"
+          nmake
+          nmake install
 
-      - name: Configure Static (Linux/macOS)
+      # Linux/macOS: Use Bash
+      - name: Build Static (Unix)
         if: runner.os != 'Windows'
         working-directory: src
-        run: |
-          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/static no-shared no-tests
-
-      - name: Build Static
-        working-directory: src
-        run: |
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            nmake
-            nmake install
-          else
-            make -j4
-            make install_sw
-          fi
         shell: bash
+        run: |
+          make -j4
+          make install_sw
         
       # ------------------------------------------------------------------------
       # PACKAGING
