@@ -70,7 +70,7 @@ jobs:
       - name: Configure Shared
         working-directory: src
         run: |
-          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests
+          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests /MT
 
       - name: Build Shared
         working-directory: src
@@ -100,7 +100,7 @@ jobs:
       - name: Configure Static
         working-directory: src
         run: |
-          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/static no-shared no-tests
+          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/static no-shared no-tests /MT
 
       - name: Build Static
         working-directory: src
