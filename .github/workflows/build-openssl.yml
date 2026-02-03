@@ -1,0 +1,132 @@
+name: Build OpenSSL 3.x
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'OpenSSL Version (e.g. 3.3.0)'
+        required: true
+        default: '3.3.0'
+
+jobs:
+  build:
+    name: ${{ matrix.os }} - ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows 64-bit
+          - os: windows-latest
+            arch: x64
+            target: VC-WIN64A
+            setup_cmd: call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          
+          # Windows 32-bit
+          - os: windows-latest
+            arch: x86
+            target: VC-WIN32
+            setup_cmd: call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars32.bat"
+
+          # Linux x64
+          - os: ubuntu-latest
+            arch: x64
+            target: linux-x86_64
+            setup_cmd: sudo apt-get update && sudo apt-get install -y build-essential
+
+          # macOS x64 (Intel)
+          - os: macos-13 # Intel runner
+            arch: x64
+            target: darwin64-x86_64-cc
+            setup_cmd: echo "Setup Mac Intel"
+
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-14 # M1 runner
+            arch: arm64
+            target: darwin64-arm64-cc
+            setup_cmd: echo "Setup Mac ARM"
+
+    steps:
+      - name: Checkout Builder Repo
+        uses: actions/checkout@v4
+
+      - name: Install Perl/NASM (Windows Only)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1 # Helper to setup VS environment
+
+      - name: Install NASM (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+
+      - name: Download OpenSSL Source
+        run: |
+          curl -L -o openssl.tar.gz https://github.com/openssl/openssl/releases/download/openssl-${{ github.event.inputs.version }}/openssl-${{ github.event.inputs.version }}.tar.gz
+          tar -xzf openssl.tar.gz
+          mv openssl-${{ github.event.inputs.version }} src
+
+      # ------------------------------------------------------------------------
+      # BUILD 1: SHARED LIBRARIES (.dll / .so / .dylib)
+      # ------------------------------------------------------------------------
+      - name: Configure Shared
+        working-directory: src
+        run: |
+          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests
+
+      - name: Build Shared
+        working-directory: src
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            nmake
+            nmake install
+          else
+            make -j4
+            make install_sw
+          fi
+        shell: bash
+
+      - name: Clean Source
+        working-directory: src
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            nmake clean
+          else
+            make clean
+          fi
+        shell: bash
+
+      # ------------------------------------------------------------------------
+      # BUILD 2: STATIC LIBRARIES (.lib / .a)
+      # ------------------------------------------------------------------------
+      - name: Configure Static
+        working-directory: src
+        run: |
+          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/static no-shared no-tests
+
+      - name: Build Static
+        working-directory: src
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            nmake
+            nmake install
+          else
+            make -j4
+            make install_sw
+          fi
+        shell: bash
+
+      # ------------------------------------------------------------------------
+      # PACKAGING
+      # ------------------------------------------------------------------------
+      - name: Zip Artifacts
+        working-directory: dist
+        run: |
+          # Create a clean zip structure
+          # Result: openssl-3.3.0-windows-x64.zip
+          7z a ../openssl-${{ github.event.inputs.version }}-${{ runner.os }}-${{ matrix.arch }}.zip .
+        shell: bash
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openssl-${{ matrix.os }}-${{ matrix.arch }}
+          path: openssl-*.zip
