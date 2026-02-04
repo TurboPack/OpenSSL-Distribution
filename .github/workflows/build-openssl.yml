@@ -16,35 +16,35 @@ jobs:
       fail-fast: false
       matrix:
         include:
-#          # Windows 64-bit
-#          - os-label: Windows
-#            os-runner: windows-latest
-#            arch: x64
-#            target: VC-WIN64A
+          # Windows 64-bit
+          - os-label: Windows
+            os-runner: windows-latest
+            arch: x64
+            target: VC-WIN64A
 
-#          # Windows 32-bit
-#          - os-label: Windows
-#            os-runner: windows-latest
-#            arch: x86
-#            target: VC-WIN32
+          # Windows 32-bit
+          - os-label: Windows
+            os-runner: windows-latest
+            arch: x86
+            target: VC-WIN32
 
-#          # Linux x64
-#          - os-label: "Linux x64"
-#            os-runner: ubuntu-latest
-#            arch: x64
-#            target: linux-x86_64
+          # Linux x64
+          - os-label: "Linux x64"
+            os-runner: ubuntu-latest
+            arch: x64
+            target: linux-x86_64
             
-#          # macOS x64 (Intel) - Cross-compile on ARM runner
-#          - os-label: macOS
-#            os-runner: macos-14
-#            arch: x64
-#            target: darwin64-x86_64-cc
+          # macOS x64 (Intel) - Cross-compile on ARM runner
+          - os-label: macOS
+            os-runner: macos-14
+            arch: x64
+            target: darwin64-x86_64-cc
 
-#          # macOS ARM64 (Apple Silicon)
-#          - os-label: macOS
-#            os-runner: macos-14
-#            arch: arm64
-#            target: darwin64-arm64-cc
+          # macOS ARM64 (Apple Silicon)
+          - os-label: macOS
+            os-runner: macos-14
+            arch: arm64
+            target: darwin64-arm64-cc
 
           # --------------------------------------------------------------------
           # NEW: ARM64 SUPPORT
