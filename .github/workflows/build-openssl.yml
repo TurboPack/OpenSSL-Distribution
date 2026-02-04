@@ -135,7 +135,7 @@ jobs:
         shell: cmd
         run: |
           ${{ matrix.setup_cmd }}
-          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests "CFLAGS=/nologo /O2 /MT"
+          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests enable-dasync "CFLAGS=/nologo /O2 /MT"
       
       - name: Configure Shared (Unix/Android)
         if: runner.os != 'Windows' && matrix.static_only != true
@@ -143,7 +143,7 @@ jobs:
         env:
           CROSS_COMPILE: ${{ matrix.cross_compile_prefix }}
         run: |
-          ./Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests
+          ./Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests enable-dasync
                 
       - name: Build Shared (Windows)
         if: runner.os == 'Windows' && matrix.static_only != true
@@ -166,23 +166,24 @@ jobs:
           make install_html_docs || echo "Docs generation failed"          
           
       # ------------------------------------------------------------------------
-      # BUILD STATIC
+      # CLEAN
       # ------------------------------------------------------------------------
 
       - name: Clean Source (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && matrix.static_only != true
         working-directory: src
         shell: cmd
-        run: |
-          ${{ matrix.setup_cmd }}
-          nmake clean
+        run: nmake clean
 
       - name: Clean Source (Unix)
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && matrix.static_only != true
         working-directory: src
-        env:
-          CROSS_COMPILE: ${{ matrix.cross_compile_prefix }}
+        shell: bash
         run: make clean
+
+      # ------------------------------------------------------------------------
+      # BUILD STATIC
+      # ------------------------------------------------------------------------
 
       - name: Configure Static (Windows)
         if: runner.os == 'Windows'
