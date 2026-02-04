@@ -201,16 +201,31 @@ jobs:
         env:
           CROSS_COMPILE: ${{ matrix.cross_compile_prefix }}
         run: |
+          # --------------------------------------------------------------------
+          # iOS FIX: Resolve Sysroot for ios64-cross
+          # --------------------------------------------------------------------
+          if [ "${{ matrix.target }}" == "ios64-cross" ]; then
+             echo "Configuring for iOS Device (ios64-cross)..."
+             
+             # 1. Find the absolute path to the iPhoneOS SDK
+             SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+             if [ -z "$SDK_PATH" ]; then
+               echo "Error: Could not find iPhoneOS SDK"
+               exit 1
+             fi
+             echo "Found SDK: $SDK_PATH"
+             
+             # 2. Export CFLAGS with the sysroot and explicit arch
+             # We assume CC=clang is default, but setting it explicitly is safer
+             export CC=clang
+             export CFLAGS="-isysroot ${SDK_PATH} -arch arm64"
+             
+             # 3. Clean up potential env interference
+             unset CROSS_TOP
+             unset CROSS_SDK
+          fi
           ./Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/static no-shared no-tests
 
-      - name: Build Static (Windows)
-        if: runner.os == 'Windows'
-        working-directory: src
-        shell: cmd
-        run: |
-          ${{ matrix.setup_cmd }}
-          nmake
-          nmake install
 
       - name: Build Static (Unix/Android/iOS)
         if: runner.os != 'Windows'
