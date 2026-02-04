@@ -1,0 +1,9 @@
+name: Build OpenSSL 3.x Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'OpenSSL Version (e.g. 3.3.0)'
+        required: true
+        default: '3.3.0'
