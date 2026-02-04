@@ -135,7 +135,7 @@ jobs:
         shell: cmd
         run: |
           ${{ matrix.setup_cmd }}
-          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests enable-dasync "CFLAGS=/nologo /O2 /MT"
+          perl Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests "CFLAGS=/nologo /O2 /MT"
       
       - name: Configure Shared (Unix/Android)
         if: runner.os != 'Windows' && matrix.static_only != true
@@ -143,7 +143,7 @@ jobs:
         env:
           CROSS_COMPILE: ${{ matrix.cross_compile_prefix }}
         run: |
-          ./Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests enable-dasync
+          ./Configure ${{ matrix.target }} --prefix=${{ github.workspace }}/dist/shared shared no-tests
                 
       - name: Build Shared (Windows)
         if: runner.os == 'Windows' && matrix.static_only != true
