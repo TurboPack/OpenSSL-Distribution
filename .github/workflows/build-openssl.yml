@@ -246,13 +246,13 @@ jobs:
           make install_sw
           
       # ------------------------------------------------------------------------
-      # REARRANGE & SPLIT (Runtime vs Dev)
+      # REARRANGE ARTIFACTS
       # ------------------------------------------------------------------------
       - name: Rearrange Output
         shell: bash
         run: |
           # 1. Create Staging Areas
-          mkdir -p dist/runtime/bin
+          mkdir -p dist/runtime
           mkdir -p dist/dev/bin
           mkdir -p dist/dev/lib
           mkdir -p dist/dev/include
@@ -263,7 +263,6 @@ jobs:
           cp src/LICENSE.txt dist/dev/
           
           # 2. Populate Dev Headers & Docs
-          # Use 'cp -L' to dereference symlinks if needed, or -r
           if [ -d "dist/shared/include" ]; then
              cp -r dist/shared/include/* dist/dev/include/
           else
@@ -292,74 +291,90 @@ jobs:
           
             # --- WINDOWS ---
             if [ "${{ runner.os }}" == "Windows" ]; then
-               # DLLs and EXEs to Runtime and Dev
-               cp dist/shared/bin/*.dll dist/runtime/bin/
-               cp dist/shared/bin/*.exe dist/runtime/bin/
+               # Runtime (Flat, No PDBs)
+               cp dist/shared/bin/*.dll dist/runtime/
+               cp dist/shared/bin/*.exe dist/runtime/
+               
+               # Dev (Structured, With PDBs)
                cp dist/shared/bin/*.dll dist/dev/bin/
                cp dist/shared/bin/*.exe dist/dev/bin/
-               
-               # PDBs to Dev/Debug only
                cp dist/shared/bin/*.pdb dist/dev/debug/ 2>/dev/null || true
                
-               # Providers/Engines Logic (Robust Find)
-               mkdir -p dist/runtime/bin/providers dist/runtime/bin/engines
+               # Providers/Engines Logic
+               mkdir -p dist/runtime/providers dist/runtime/engines
                mkdir -p dist/dev/bin/providers dist/dev/bin/engines
                
-               # Find all DLLs in lib (where OpenSSL puts modules on Win)
                find dist/shared/lib -name "*.dll" | while read file; do
                    if [[ "$file" == *"ossl-modules"* ]]; then
-                       cp "$file" dist/runtime/bin/providers/
+                       cp "$file" dist/runtime/providers/
                        cp "$file" dist/dev/bin/providers/
+                       pdb="${file%.dll}.pdb"
+                       if [ -f "$pdb" ]; then cp "$pdb" dist/dev/bin/providers/; fi
                    elif [[ "$file" == *"engines"* ]]; then
-                       cp "$file" dist/runtime/bin/engines/
+                       cp "$file" dist/runtime/engines/
                        cp "$file" dist/dev/bin/engines/
+                       pdb="${file%.dll}.pdb"
+                       if [ -f "$pdb" ]; then cp "$pdb" dist/dev/bin/engines/; fi
                    fi
                done
-
-               # Find PDBs for modules
                find dist/shared/lib -name "*.pdb" -exec cp {} dist/dev/debug/ \;
 
             # --- UNIX (Linux/macOS/Android) ---
             else
-               # Shared Objects / Dylibs
-               # Use generic find to locate them wherever they are (lib, lib64)
-               find dist/shared -type f \( -name "libcrypto*.so*" -o -name "libssl*.so*" -o -name "libcrypto*.dylib" -o -name "libssl*.dylib" \) -exec cp -P {} dist/runtime/bin/ \;
-               # Copy same files to Dev
-               cp -P dist/runtime/bin/* dist/dev/bin/
+               # A. Copy to Dev (Keep symbols / Original state)
+               find dist/shared -type f \( -name "libcrypto*.so*" -o -name "libssl*.so*" -o -name "libcrypto*.dylib" -o -name "libssl*.dylib" \) -exec cp -L {} dist/dev/bin/ \;
                
-               # Executable
                if [ -f "dist/shared/bin/openssl" ]; then
-                 cp dist/shared/bin/openssl dist/runtime/bin/
                  cp dist/shared/bin/openssl dist/dev/bin/
                fi
 
-               # Providers & Engines
-               mkdir -p dist/runtime/bin/providers dist/runtime/bin/engines
                mkdir -p dist/dev/bin/providers dist/dev/bin/engines
-               
-               find dist/shared -path "*/ossl-modules/*" \( -name "*.so" -o -name "*.dylib" \) -exec cp {} dist/runtime/bin/providers/ \;
-               find dist/shared -path "*/engines-3/*" \( -name "*.so" -o -name "*.dylib" \) -exec cp {} dist/runtime/bin/engines/ \;
-               
-               # Sync Modules to Dev
-               cp dist/runtime/bin/providers/* dist/dev/bin/providers/ 2>/dev/null || true
-               cp dist/runtime/bin/engines/* dist/dev/bin/engines/ 2>/dev/null || true
+               find dist/shared -path "*/ossl-modules/*" \( -name "*.so" -o -name "*.dylib" \) -exec cp -L {} dist/dev/bin/providers/ \;
+               find dist/shared -path "*/engines-3/*" \( -name "*.so" -o -name "*.dylib" \) -exec cp -L {} dist/dev/bin/engines/ \;
 
-               # macOS Symbols
+               # B. Copy Dev to Runtime
+               cp -r dist/dev/bin/* dist/runtime/
+               if [ -d "dist/runtime/providers" ]; then mv dist/runtime/providers/* dist/runtime/providers/ 2>/dev/null || true; fi
+               
+               # C. Determine Strip Tool & Flags
+               STRIP_BIN="strip"
+               STRIP_FLAGS="-s" # Default to aggressive strip (-s) for Linux x64
+
+               if [ "${{ matrix.os-label }}" == "Android" ]; then
+                  STRIP_BIN="llvm-strip"
+                  STRIP_FLAGS="--strip-unneeded"
+               elif [ "${{ matrix.arch }}" == "arm64" ] && [ "${{ runner.os }}" == "Linux" ]; then
+                  # Linux ARM64 Cross-Compile
+                  STRIP_BIN="${{ matrix.cross_compile_prefix }}strip"
+                  STRIP_FLAGS="--strip-unneeded"
+               elif [ "${{ runner.os }}" == "macOS" ]; then
+                  STRIP_BIN="strip"
+                  STRIP_FLAGS="-x"
+               fi
+
+               echo "Stripping Runtime binaries using: $STRIP_BIN $STRIP_FLAGS"
+
+               # D. Execute Strip on Runtime folder
+               # FIX: Ensure files are writable before stripping!
+               chmod -R u+w dist/runtime
+               
+               find dist/runtime -type f \( -name "*.so*" -o -name "*.dylib" -o -name "openssl" \) -print0 | xargs -0 -I {} $STRIP_BIN $STRIP_FLAGS {}
+               
+               # E. macOS Dev Debug Symbols (dSYM)
                if [ "${{ runner.os }}" == "macOS" ]; then
                   for lib in dist/dev/bin/*.dylib dist/dev/bin/providers/*.dylib dist/dev/bin/engines/*.dylib; do
                      if [ -f "$lib" ] && [ ! -L "$lib" ]; then
                         dsymutil "$lib" -o "$lib.dSYM"
                         mv "$lib.dSYM" dist/dev/debug/
                         strip -x "$lib"
-                        # Note: We strip the DEV copy. The Runtime copy should also be stripped ideally.
-                        # Re-copying stripped version to runtime:
-                        cp "$lib" "dist/runtime/${lib#dist/dev/}" 
                      fi
                   done
                fi
             fi
-          fi # End Shared Check
+          fi
 
+          # 5. Cleanup Empty Directories
+          find dist -type d -empty -delete
       # ------------------------------------------------------------------------
       # PACKAGING
       # ------------------------------------------------------------------------
