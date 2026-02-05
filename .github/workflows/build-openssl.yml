@@ -145,17 +145,22 @@ jobs:
           OPENSSLDIR="/usr/lib/ssl"
           PREFIX="/usr/local"
           
+          # Linux Specifics: Use $ORIGIN for relative loading
+          LDFLAGS=""
+          if [ "${{ runner.os }}" == "Linux" ]; then
+             LDFLAGS="-Wl,-rpath,\$$ORIGIN"
+          fi
+          
           if [ "${{ runner.os }}" == "macOS" ]; then
              OPENSSLDIR="/private/etc/ssl"
           fi
           
           # 2. Configure
-          # -Wl,-rpath,\$$ORIGIN ensures the binary looks in its own folder for dependencies
           ./Configure ${{ matrix.target }} \
             --prefix=$PREFIX \
             --openssldir=$OPENSSLDIR \
             shared no-tests \
-            "-Wl,-rpath,\$$ORIGIN"
+            $LDFLAGS
                 
       - name: Build Shared (Windows)
         if: runner.os == 'Windows' && matrix.static_only != true
@@ -236,11 +241,13 @@ jobs:
           fi
 
           # 2. iOS Specifics
-          IOS_FLAGS=""
+          # We construct a CFLAGS string, not raw arguments
+          EXTRA_FLAGS=""
           if [ "${{ matrix.target }}" == "ios64-cross" ]; then
              SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
              export CC=clang
-             IOS_FLAGS="-isysroot ${SDK_PATH} -arch arm64"
+             # Note the quotes around the value
+             EXTRA_FLAGS="CFLAGS=-isysroot ${SDK_PATH} -arch arm64"
              unset CROSS_TOP
              unset CROSS_SDK
           fi
@@ -250,7 +257,7 @@ jobs:
              --prefix=$PREFIX \
              --openssldir=$OPENSSLDIR \
              no-shared no-tests \
-             $IOS_FLAGS
+             "$EXTRA_FLAGS"
 
       - name: Build Static (Windows)
         if: runner.os == 'Windows'
@@ -439,10 +446,16 @@ jobs:
         run: |
           echo "=== Starting Smoke Test ==="
           
+          # 1. Define Paths
+          RUNTIME_DIR="${{ github.workspace }}/dist/runtime"
+          
           if [ "${{ runner.os }}" == "Windows" ]; then
-             EXE="./dist/runtime/openssl.exe"
+             EXE="$RUNTIME_DIR/openssl.exe"
           else
-             EXE="./dist/runtime/openssl"
+             EXE="$RUNTIME_DIR/openssl"
+             # Force loader to look in runtime dir first
+             export LD_LIBRARY_PATH="$RUNTIME_DIR:$LD_LIBRARY_PATH"
+             export DYLD_LIBRARY_PATH="$RUNTIME_DIR:$DYLD_LIBRARY_PATH"
           fi
 
           if [ ! -f "$EXE" ]; then
@@ -450,7 +463,7 @@ jobs:
              exit 1
           fi
 
-          # Check if we can execute on this runner
+          # 2. Check if we can execute on this runner
           SHOULD_RUN=false
 
           if [ "${{ matrix.os-label }}" == "Android" ]; then
@@ -466,10 +479,10 @@ jobs:
              SHOULD_RUN=true
           fi
 
+          # 3. Execute
           if [ "$SHOULD_RUN" == "true" ]; then
              echo "Attempting to run: $EXE version -a"
              
-             # This confirms RPATH/$ORIGIN/@loader_path works
              chmod +x $EXE
              $EXE version -a
              
