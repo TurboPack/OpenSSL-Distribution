@@ -241,23 +241,23 @@ jobs:
           fi
 
           # 2. iOS Specifics
-          # We construct a CFLAGS string, not raw arguments
           EXTRA_FLAGS=""
           if [ "${{ matrix.target }}" == "ios64-cross" ]; then
              SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
              export CC=clang
-             # Note the quotes around the value
+             # Construct the CFLAGS argument
              EXTRA_FLAGS="CFLAGS=-isysroot ${SDK_PATH} -arch arm64"
              unset CROSS_TOP
              unset CROSS_SDK
           fi
 
           # 3. Configure
+          # Fix: Use ${VAR:+"$VAR"} to avoid passing an empty string argument
           ./Configure ${{ matrix.target }} \
              --prefix=$PREFIX \
              --openssldir=$OPENSSLDIR \
              no-shared no-tests \
-             "$EXTRA_FLAGS"
+             ${EXTRA_FLAGS:+"$EXTRA_FLAGS"}
 
       - name: Build Static (Windows)
         if: runner.os == 'Windows'
