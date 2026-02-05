@@ -381,3 +381,38 @@ jobs:
 
           # 5. Cleanup Empty Directories
           find dist -type d -empty -delete
+
+      # ------------------------------------------------------------------------
+      # PACKAGING
+      # ------------------------------------------------------------------------
+      
+      - name: Pack Runtime
+        if: matrix.static_only != true
+        working-directory: dist/runtime
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+             7z a "${{ github.workspace }}/openssl-${{ github.event.inputs.version }}-${{ matrix.os-label }}-${{ matrix.arch }}.zip" .
+          else
+             tar -czvf "${{ github.workspace }}/openssl-${{ github.event.inputs.version }}-${{ matrix.os-label }}-${{ matrix.arch }}.tar.gz" .
+          fi
+        shell: bash
+
+      - name: Pack Dev
+        working-directory: dist/dev
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+             7z a "${{ github.workspace }}/openssl-${{ github.event.inputs.version }}-${{ matrix.os-label }}-${{ matrix.arch }}-dev.zip" .
+          else
+             tar -czvf "${{ github.workspace }}/openssl-${{ github.event.inputs.version }}-${{ matrix.os-label }}-${{ matrix.arch }}-dev.tar.gz" .
+          fi
+        shell: bash
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openssl-${{ matrix.os-label }}-${{ matrix.arch }}
+          compression-level: 0 
+          path: |
+            ${{ github.workspace }}/openssl-*.zip
+            ${{ github.workspace }}/openssl-*.tar.gz
+          if-no-files-found: warn
