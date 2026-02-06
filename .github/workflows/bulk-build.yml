@@ -22,7 +22,7 @@ jobs:
       - name: Fetch Version Data
         id: fetch_data
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RBPW_PAT }}
         run: |
           echo "Fetching Upstream Tags..."
           # Get all tags matching openssl-3.*
