@@ -522,4 +522,5 @@ jobs:
           path: |
             ${{ github.workspace }}/openssl-*.zip
             ${{ github.workspace }}/openssl-*.tar.gz
+          retention-days: 15 
           if-no-files-found: warn
