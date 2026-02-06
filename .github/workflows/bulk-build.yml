@@ -96,12 +96,16 @@ jobs:
           to_build.sort()
           
           # 5. Output to GitHub Env
-          # We join with commas for the next step to loop over
           build_list_str = ",".join(to_build)
-          print(f"::set-output name=build_list::{build_list_str}")
           
-          if not to_build:
-              print("No missing versions found.")
+          # New GITHUB_OUTPUT syntax
+          if "GITHUB_OUTPUT" in os.environ:
+              with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                  print(f"build_list={build_list_str}", file=f)
+          else:
+              # Fallback for local testing
+              print(f"build_list={build_list_str}")
+              
 
       - name: Trigger Builds
         env:
