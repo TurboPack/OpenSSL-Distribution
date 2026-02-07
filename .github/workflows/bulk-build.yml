@@ -109,7 +109,7 @@ jobs:
 
       - name: Trigger Builds
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RBPW_PAT }}
           BUILD_LIST: ${{ steps.analyze.outputs.build_list }}
           IS_DRY_RUN: ${{ inputs.dry_run }}
         run: |
