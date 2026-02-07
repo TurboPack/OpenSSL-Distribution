@@ -135,13 +135,26 @@ jobs:
             echo "RELEASE_TAG=v${{ env.OPENSSL_VERSION }}-${DATE_STR}" >> $GITHUB_ENV
           fi
 
+      - name: Determine Tag
+        run: |
+          # Check if user provided a specific tag in manual dispatch
+          if [ "${{ inputs.tag_name }}" != "" ] && [ "${{ inputs.tag_name }}" != "auto" ]; then
+            echo "RELEASE_TAG=${{ inputs.tag_name }}" >> $GITHUB_ENV
+          else
+            # NEW FORMAT: v.{version} (e.g., v.3.3.1)
+            # We assume OPENSSL_VERSION was detected in the previous step
+            echo "RELEASE_TAG=v.${{ env.OPENSSL_VERSION }}" >> $GITHUB_ENV
+          fi
+
       - name: Create Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TITLE="OpenSSL Distribution ${{ env.OPENSSL_VERSION }}"
           
-          # Default to Draft/Pre-release for safety
+          # Create Draft Release
+          # Note: GitHub automatically attaches the repo source code to this tag.
+          # We cannot disable that, but we won't upload any other source artifacts.
           gh release create "${{ env.RELEASE_TAG }}" \
             --draft \
             --prerelease \
