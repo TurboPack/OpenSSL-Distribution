@@ -301,63 +301,78 @@ jobs:
             done
           done
           
-          # 2. Combine with Lipo
-          mkdir -p dist/shared dist/static
-          cp -R raw-binaries/raw-macOS-x64-shared/usr/local/* dist/shared/
-          cp -R raw-binaries/raw-macOS-x64-static/usr/local/* dist/static/
+          # 2. Combine with Lipo into exact strict layout
+          mkdir -p dist/engines dist/providers dist/lib/static
           
           lipo_file() {
-            local rel_path=$1
-            local f_x86="raw-binaries/raw-macOS-x64-$rel_path"
-            local f_arm="raw-binaries/raw-macOS-arm64-$rel_path"
-            local out_path="dist/$(echo "$rel_path" | sed 's|^shared/||;s|^static/||')"
+            local src_path=$1
+            local dest_path=$2
+            local f_x86="raw-binaries/raw-macOS-x64-$src_path"
+            local f_arm="raw-binaries/raw-macOS-arm64-$src_path"
             
             if [ -L "$f_x86" ]; then return 0; fi
             if [ ! -f "$f_x86" ] || [ ! -f "$f_arm" ]; then return 0; fi
             
-            mkdir -p "$(dirname "$out_path")"
-            lipo -create -output "$out_path" "$f_x86" "$f_arm"
+            lipo -create -output "$dest_path" "$f_x86" "$f_arm"
           }
           
-          find raw-binaries/raw-macOS-x64-shared/usr/local -type f | while read -r f; do
-            lipo_file "shared/${f#raw-binaries/raw-macOS-x64-shared/usr/local/}"
+          lipo_file "shared/usr/local/bin/openssl" "dist/openssl"
+          
+          find raw-binaries/raw-macOS-x64-shared/usr/local/lib -maxdepth 1 -type f -name "*.dylib" | while read -r f; do
+            lipo_file "shared/usr/local/lib/$(basename "$f")" "dist/$(basename "$f")"
           done
-          find raw-binaries/raw-macOS-x64-static/usr/local -type f | while read -r f; do
-            lipo_file "static/${f#raw-binaries/raw-macOS-x64-static/usr/local/}"
+          
+          if [ -d "raw-binaries/raw-macOS-x64-shared/usr/local/lib/engines-3" ]; then
+            find raw-binaries/raw-macOS-x64-shared/usr/local/lib/engines-3 -type f -name "*.dylib" | while read -r f; do
+              lipo_file "shared/usr/local/lib/engines-3/$(basename "$f")" "dist/engines/$(basename "$f")"
+            done
+          fi
+          
+          if [ -d "raw-binaries/raw-macOS-x64-shared/usr/local/lib/ossl-modules" ]; then
+            find raw-binaries/raw-macOS-x64-shared/usr/local/lib/ossl-modules -type f -name "*.dylib" | while read -r f; do
+              lipo_file "shared/usr/local/lib/ossl-modules/$(basename "$f")" "dist/providers/$(basename "$f")"
+            done
+          fi
+          
+          find raw-binaries/raw-macOS-x64-static/usr/local/lib -maxdepth 1 -type f -name "*.a" | while read -r f; do
+            lipo_file "static/usr/local/lib/$(basename "$f")" "dist/lib/static/$(basename "$f")"
           done
 
       - name: Organize (Standard Platforms)
         if: matrix.label != 'macOS'
         shell: bash
         run: |
-          mkdir -p dist/shared dist/static
+          mkdir -p dist/engines dist/providers dist/lib/static
+          if [ "${{ matrix.label }}" == "Windows" ]; then mkdir -p dist/lib/import; fi
           
-          if [ -d "raw-binaries/raw-${{ matrix.label }}-${{ matrix.arch }}-shared/usr/local" ]; then
-            cp -R raw-binaries/raw-${{ matrix.label }}-${{ matrix.arch }}-shared/usr/local/* dist/shared/
-          fi
-          if [ -d "raw-binaries/raw-${{ matrix.label }}-${{ matrix.arch }}-static/usr/local" ]; then
-            cp -R raw-binaries/raw-${{ matrix.label }}-${{ matrix.arch }}-static/usr/local/* dist/static/
-          fi
+          SHARED_DIR="raw-binaries/raw-${{ matrix.label }}-${{ matrix.arch }}-shared/usr/local"
+          STATIC_DIR="raw-binaries/raw-${{ matrix.label }}-${{ matrix.arch }}-static/usr/local"
           
-          # Windows specific cleanup
+          # Executable
+          [ -f "$SHARED_DIR/bin/openssl" ] && cp "$SHARED_DIR/bin/openssl" dist/
+          [ -f "$SHARED_DIR/bin/openssl.exe" ] && cp "$SHARED_DIR/bin/openssl.exe" dist/
+          
+          # Shared Libs
           if [ "${{ matrix.label }}" == "Windows" ]; then
-            mkdir -p dist/lib/import dist/lib/static[ -d "dist/shared/lib" ] && mv dist/shared/lib/*.lib dist/lib/import/ 2>/dev/null || true
-            [ -d "dist/static/lib" ] && mv dist/static/lib/*.lib dist/lib/static/ 2>/dev/null || true
-            find dist -type f \( -name "*.pdb" -o -name "*.exp" -o -name "*.ilk" \) -delete
+            cp "$SHARED_DIR"/bin/*.dll dist/ 2>/dev/null || true
+            cp "$SHARED_DIR"/lib/*.lib dist/lib/import/ 2>/dev/null || true
+          else
+            # -type f naturally excludes symlinks
+            find "$SHARED_DIR/lib" -maxdepth 1 -type f \( -name "*.so*" -o -name "*.dylib" \) -exec cp {} dist/ \; 2>/dev/null || true
           fi
           
-          # Unix specific cleanup
+          # Engines & Providers
+          [ -d "$SHARED_DIR/lib/engines-3" ] && find "$SHARED_DIR/lib/engines-3" -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.dll" \) -exec cp {} dist/engines/ \; 2>/dev/null || true[ -d "$SHARED_DIR/lib/ossl-modules" ] && find "$SHARED_DIR/lib/ossl-modules" -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.dll" \) -exec cp {} dist/providers/ \; 2>/dev/null || true
+          
+          # Static Libs
+          [ -d "$STATIC_DIR/lib" ] && find "$STATIC_DIR/lib" -maxdepth 1 -type f \( -name "*.a" -o -name "*.lib" \) -exec cp {} dist/lib/static/ \; 2>/dev/null || true
+          
+          # Cleanup Unix Symbols (Windows PDBs are naturally ignored because we didn't copy them)
           if [ "${{ matrix.label }}" != "Windows" ]; then
-            find dist -type f \( -name "*.so" -o -name "*.a" -o -name "openssl" \) | while read -r f; do
+            find dist -type f \( -name "*.so*" -o -name "*.a" -o -name "openssl" -o -name "*.dylib" \) | while read -r f; do
               strip -S "$f" 2>/dev/null || true
             done
           fi
-
-      - name: Download OpenSSL License
-        shell: bash
-        run: |
-          VERSION="${{ needs.validate-version.outputs.version }}"
-          curl -sSL "https://raw.githubusercontent.com/openssl/openssl/openssl-${{ needs.validate-version.outputs.version }}/LICENSE.txt" -o dist/LICENSE.txt
 
       - name: Finalize Package
         shell: bash
@@ -386,9 +401,9 @@ jobs:
           * engines/            - OpenSSL engines[redistributable/optional] 
           * providers/          - OpenSSL providers[redistributable/optional] 
           * doc/                - Developers Documentation [non-redistributable] 
-          * include/            - C Header files [non-redistributable] 
-          * lib/import/         - Import libraries (Windows only) [non-redistributable] 
-          * lib/static/         - Static libraries (.lib / .a) [non-redistributable]
+          * include/            - C Header files[non-redistributable] 
+          * lib/import/         - Import libraries (Windows only)[non-redistributable] 
+          * lib/static/         - Static libraries (.lib / .a)[non-redistributable]
           
           Linking Instructions:
           ---------------------
@@ -424,14 +439,20 @@ jobs:
           chmod +x "$SCRIPT_FILE"
           
           # Zip Architecture (No symlinks)
+          ARCHIVE_NAME="openssl-${{ needs.validate-version.outputs.version }}-${{ matrix.label }}-${{ matrix.arch }}.zip"
           cd dist
-          zip -r -y ../openssl-${{ needs.validate-version.outputs.version }}-${{ matrix.label }}-${{ matrix.arch }}.zip .
+          zip -r -y "../$ARCHIVE_NAME" .
+          cd ..
+          
+          # Export filename to environment for the upload step
+          echo "ARCHIVE_FILE=$ARCHIVE_NAME" >> $GITHUB_ENV
 
       - name: Upload Final Archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: openssl-${{ needs.validate-version.outputs.version }}-${{ matrix.label }}-${{ matrix.arch }}
-          path: openssl-${{ needs.validate-version.outputs.version }}-${{ matrix.label }}-${{ matrix.arch }}.zip
+          path: ${{ env.ARCHIVE_FILE }}
+          archive: false
           retention-days: 5
 
       - name: Upload Build Metadata (Once)
