@@ -217,15 +217,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { label: Windows, arch: x64, runner: windows-latest }
-          - { label: Windows, arch: arm64, runner: windows-latest }
-          - { label: Windows, arch: arm64ec, runner: windows-latest }
+          # Windows packaging moved to ubuntu-latest for speed and native 'zip' support
+          - { label: Windows, arch: x64, runner: ubuntu-latest }
+          - { label: Windows, arch: arm64, runner: ubuntu-latest }
+          - { label: Windows, arch: arm64ec, runner: ubuntu-latest }
+          
+          # Linux & Android
           - { label: Linux, arch: x64, runner: ubuntu-latest }
           - { label: Linux, arch: arm64, runner: ubuntu-latest }
-          - { label: macOS, arch: universal, runner: macos-14 }
           - { label: Android, arch: x64, runner: ubuntu-latest }
           - { label: Android, arch: arm64, runner: ubuntu-latest }
           - { label: Android, arch: arm, runner: ubuntu-latest }
+          
+          # Apple platforms MUST use macOS runners for lipo, otool, install_name_tool, and Apple strip
+          - { label: macOS, arch: universal, runner: macos-14 }
           - { label: iOS, arch: arm64, runner: macos-14 }
           - { label: iOS, arch: sim-arm64, runner: macos-14 }
           - { label: iOS, arch: sim-x64, runner: macos-14 }
