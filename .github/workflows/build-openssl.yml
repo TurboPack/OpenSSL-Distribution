@@ -41,7 +41,7 @@ jobs:
           MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
           EOL_DATE=$(curl -s https://endoflife.date/api/openssl.json | jq -r ".[] | select(.cycle == \"$MAJOR_MINOR\") | .eol")
           
-          if [ -z "$EOL_DATE" ] ||[ "$EOL_DATE" == "null" ]; then
+          if [ -z "$EOL_DATE" ] || [ "$EOL_DATE" == "null" ]; then
             echo "⚠️ Could not determine EOL date for $MAJOR_MINOR. Proceeding cautiously."
           else
             TODAY=$(date +%Y-%m-%d)
@@ -125,34 +125,27 @@ jobs:
           
           set "PREFIX=%GITHUB_WORKSPACE%\raw_artifact\usr\local"
           set "TARGET=${{ matrix.platform.target }}"
-          set "LINKAGE=${{ matrix.linkage }}"
-          set "ARCH=${{ matrix.platform.arch }}"
           
-          set "EXTRA_OPTS="
-          if "%ARCH%"=="arm64ec" (
-            set "EXTRA_OPTS=no-asm"
-            set "CFLAGS_STR=CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00"
-            set "LDFLAGS_STR=LDFLAGS=/MACHINE:ARM64EC /DEBUG"
-            set "ARFLAGS_STR=ARFLAGS=/MACHINE:ARM64EC"
-          ) else (
-            set "CFLAGS_STR=-D_WIN32_WINNT=0x0A00"
-            set "LDFLAGS_STR="
-            set "ARFLAGS_STR="
-          )
-          
-          if "%LINKAGE%"=="shared" (
-            perl Configure %TARGET% --prefix="%PREFIX%" shared no-tests %EXTRA_OPTS% %CFLAGS_STR% %LDFLAGS_STR% %ARFLAGS_STR%
-          ) else (
-            if "%ARCH%"=="arm64ec" (
-              set "CFLAGS_STR=CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00 /MD"
+          if "${{ matrix.linkage }}"=="shared" (
+            if "${{ matrix.platform.arch }}"=="arm64ec" (
+              perl Configure %TARGET% --prefix="%PREFIX%" shared no-tests no-asm "CFLAGS=/nologo /arm64EC /O1 /D_WIN32_WINNT=0x0A00" "LDFLAGS=/MACHINE:ARM64EC" "ARFLAGS=/MACHINE:ARM64EC"
             ) else (
-              set "CFLAGS_STR=CFLAGS=/MD -D_WIN32_WINNT=0x0A00"
+              perl Configure %TARGET% --prefix="%PREFIX%" shared no-tests -D_WIN32_WINNT=0x0A00
             )
-            perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-tests %EXTRA_OPTS% %CFLAGS_STR% %LDFLAGS_STR% %ARFLAGS_STR% || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-module no-tests %EXTRA_OPTS% %CFLAGS_STR% %LDFLAGS_STR% %ARFLAGS_STR%
+          ) else (
+            if "${{ matrix.platform.arch }}"=="arm64ec" (
+              perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-tests no-asm "CFLAGS=/nologo /arm64EC /O1 /D_WIN32_WINNT=0x0A00 /MD" "LDFLAGS=/MACHINE:ARM64EC" "ARFLAGS=/MACHINE:ARM64EC" || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-module no-tests no-asm "CFLAGS=/nologo /arm64EC /O1 /D_WIN32_WINNT=0x0A00 /MD" "LDFLAGS=/MACHINE:ARM64EC" "ARFLAGS=/MACHINE:ARM64EC"
+            ) else (
+              perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-tests "CFLAGS=/MD -D_WIN32_WINNT=0x0A00" || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-module no-tests "CFLAGS=/MD -D_WIN32_WINNT=0x0A00"
+            )
           )
           
           nmake
           nmake install_sw
+
+      - name: Install Linux Dependencies
+        if: matrix.platform.label == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libsctp-dev
 
       - name: Compile Unix (Linux/macOS/Android/iOS)
         if: matrix.platform.label != 'Windows'
@@ -163,6 +156,8 @@ jobs:
           LABEL="${{ matrix.platform.label }}"
           
           EXTRA_FLAGS=""
+          
+          # --- Platform Specific Setup ---
           if [ "$LABEL" == "macOS" ]; then
             EXTRA_FLAGS="-mmacosx-version-min=${{ matrix.platform.minos }}"
           elif [ "$LABEL" == "Linux" ]; then
@@ -171,8 +166,17 @@ jobs:
             sed -i 's/-fPIC/-fPIC -Wl,-z,max-page-size=16384/g' Configurations/15-android.conf
             export ANDROID_NDK_ROOT=$ANDROID_NDK_LATEST_HOME
             export PATH=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+          elif [ "$LABEL" == "iOS" ]; then
+            if [[ "$TARGET" == *"simulator"* ]]; then
+              export CROSS_TOP=$(xcode-select -print-path)/Platforms/iPhoneSimulator.platform/Developer
+              export CROSS_SDK=iPhoneSimulator.sdk
+            else
+              export CROSS_TOP=$(xcode-select -print-path)/Platforms/iPhoneOS.platform/Developer
+              export CROSS_SDK=iPhoneOS.sdk
+            fi
           fi
           
+          # --- Configure & Build ---
           if [ "$LINKAGE" == "shared" ]; then
             ./Configure $TARGET shared no-tests $EXTRA_FLAGS --prefix=/usr/local
           else
