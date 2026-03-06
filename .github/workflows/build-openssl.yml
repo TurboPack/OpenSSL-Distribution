@@ -126,15 +126,19 @@ jobs:
           set "PREFIX=%GITHUB_WORKSPACE%\raw_artifact\usr\local"
           set "TARGET=${{ matrix.platform.target }}"
           
+          :: --- SHARED BUILD ---
           if "${{ matrix.linkage }}"=="shared" (
             if "${{ matrix.platform.arch }}"=="arm64ec" (
-              perl Configure %TARGET% --prefix="%PREFIX%" shared no-tests no-asm "CFLAGS=/nologo /arm64EC /O1 /D_WIN32_WINNT=0x0A00" "LDFLAGS=/MACHINE:ARM64EC" "ARFLAGS=/MACHINE:ARM64EC"
+              perl Configure %TARGET% --prefix="%PREFIX%" shared no-tests no-asm "CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00" "LDFLAGS=/MACHINE:ARM64EC /DEBUG" "ARFLAGS=/MACHINE:ARM64EC"
             ) else (
               perl Configure %TARGET% --prefix="%PREFIX%" shared no-tests -D_WIN32_WINNT=0x0A00
             )
-          ) else (
+          )
+          
+          :: --- STATIC BUILD ---
+          if "${{ matrix.linkage }}"=="static" (
             if "${{ matrix.platform.arch }}"=="arm64ec" (
-              perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-tests no-asm "CFLAGS=/nologo /arm64EC /O1 /D_WIN32_WINNT=0x0A00 /MD" "LDFLAGS=/MACHINE:ARM64EC" "ARFLAGS=/MACHINE:ARM64EC" || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-module no-tests no-asm "CFLAGS=/nologo /arm64EC /O1 /D_WIN32_WINNT=0x0A00 /MD" "LDFLAGS=/MACHINE:ARM64EC" "ARFLAGS=/MACHINE:ARM64EC"
+              perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-tests no-asm "CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00 /MD" "LDFLAGS=/MACHINE:ARM64EC /DEBUG" "ARFLAGS=/MACHINE:ARM64EC" || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-module no-tests no-asm "CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00 /MD" "LDFLAGS=/MACHINE:ARM64EC /DEBUG" "ARFLAGS=/MACHINE:ARM64EC"
             ) else (
               perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-tests "CFLAGS=/MD -D_WIN32_WINNT=0x0A00" || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-module no-tests "CFLAGS=/MD -D_WIN32_WINNT=0x0A00"
             )
@@ -145,7 +149,12 @@ jobs:
 
       - name: Install Linux Dependencies
         if: matrix.platform.label == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libsctp-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsctp-dev
+          if [ "${{ matrix.platform.arch }}" == "arm64" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+          fi
 
       - name: Compile Unix (Linux/macOS/Android/iOS)
         if: matrix.platform.label != 'Windows'
@@ -162,6 +171,9 @@ jobs:
             EXTRA_FLAGS="-mmacosx-version-min=${{ matrix.platform.minos }}"
           elif [ "$LABEL" == "Linux" ]; then
             EXTRA_FLAGS="enable-sctp -Wl,-rpath,'\$\$ORIGIN'"
+            if [ "$TARGET" == "linux-aarch64" ]; then
+              export CROSS_COMPILE=aarch64-linux-gnu-
+            fi
           elif [ "$LABEL" == "Android" ]; then
             sed -i 's/-fPIC/-fPIC -Wl,-z,max-page-size=16384/g' Configurations/15-android.conf
             export ANDROID_NDK_ROOT=$ANDROID_NDK_LATEST_HOME
