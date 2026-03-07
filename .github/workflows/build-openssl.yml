@@ -523,7 +523,7 @@ jobs:
           
           for id in $IDS; do
             echo "Deleting artifact ID: $id"
-            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || echo "Failed to delete artifact ID: $id" ; true # Continue even if deletion fails
           done
           
           echo "✅ Cleanup complete."    
