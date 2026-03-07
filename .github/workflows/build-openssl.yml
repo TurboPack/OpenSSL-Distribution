@@ -385,6 +385,25 @@ jobs:
           # Create Metadata
           echo "${{ needs.validate-version.outputs.version }}" > dist/version.txt
           
+          # Create Symlink Script (Linux and macOS only)
+          if [ "${{ matrix.label }}" == "Linux" ]; then
+            cat << 'EOF' > dist/install_symlinks.sh
+          #!/bin/sh
+          echo "Restoring shared library symlinks..."
+          ln -sf libcrypto.so.3 libcrypto.so
+          ln -sf libssl.so.3 libssl.so
+          EOF
+            chmod +x dist/install_symlinks.sh
+          elif [ "${{ matrix.label }}" == "macOS" ]; then
+            cat << 'EOF' > dist/install_symlinks.sh
+          #!/bin/sh
+          echo "Restoring shared library symlinks..."
+          ln -sf libcrypto.3.dylib libcrypto.dylib
+          ln -sf libssl.3.dylib libssl.dylib
+          EOF
+            chmod +x dist/install_symlinks.sh
+          fi
+          
           # --- Generate README ---
           cat << 'EOF' > dist/README.txt
           OpenSSL Distribution Package
@@ -396,14 +415,14 @@ jobs:
           ---------------
           * version.txt         - OpenSSL version in this package [non-redistributable]
           * openssl             - The OpenSSL command-line utility [redistributable/optional]
-          * libcrypto / libssl  - Shared libraries[redistributable/required] 
+          * libcrypto / libssl  - Shared libraries [redistributable/required] 
           * install_symlinks.sh - (POSIX only) Script to restore shared library symlinks [redistributable/optional] 
-          * engines/            - OpenSSL engines[redistributable/optional] 
-          * providers/          - OpenSSL providers[redistributable/optional] 
+          * engines/            - OpenSSL engines [redistributable/optional] 
+          * providers/          - OpenSSL providers [redistributable/optional] 
           * doc/                - Developers Documentation [non-redistributable] 
-          * include/            - C Header files[non-redistributable] 
-          * lib/import/         - Import libraries (Windows only)[non-redistributable] 
-          * lib/static/         - Static libraries (.lib / .a)[non-redistributable]
+          * include/            - C Header files [non-redistributable] 
+          * lib/import/         - Import libraries (Windows only) [non-redistributable] 
+          * lib/static/         - Static libraries (.lib / .a) [non-redistributable]
           
           Linking Instructions:
           ---------------------
@@ -425,18 +444,6 @@ jobs:
           --------------
           Windows does not use symlinks for OpenSSL DLLs. You can safely ignore or delete the shell script.
           EOF
-          
-          # Create Symlink Script
-          SCRIPT_FILE="dist/install_symlinks.sh"
-          echo "#!/bin/sh" > "$SCRIPT_FILE"
-          if [ "${{ matrix.label }}" == "macOS" ]; then
-            echo "ln -sf libcrypto.3.dylib libcrypto.dylib" >> "$SCRIPT_FILE"
-            echo "ln -sf libssl.3.dylib libssl.dylib" >> "$SCRIPT_FILE"
-          elif [ "${{ matrix.label }}" != "Windows" ]; then
-            echo "ln -sf libcrypto.so.3 libcrypto.so" >> "$SCRIPT_FILE"
-            echo "ln -sf libssl.so.3 libssl.so" >> "$SCRIPT_FILE"
-          fi
-          chmod +x "$SCRIPT_FILE"
           
           # Zip Architecture (No symlinks)
           ARCHIVE_NAME="openssl-${{ needs.validate-version.outputs.version }}-${{ matrix.label }}-${{ matrix.arch }}.zip"
