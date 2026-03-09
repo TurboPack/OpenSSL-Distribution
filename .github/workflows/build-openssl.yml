@@ -115,8 +115,8 @@ jobs:
           - { label: Android, os: ubuntu-latest, arch: arm64, target: android-arm64, api: 21 }
           - { label: Android, os: ubuntu-latest, arch: arm, target: android-arm, api: 21 }
           - { label: iOS, os: macos-14, arch: arm64, target: ios64-cross }
-          - { label: iOS, os: macos-14, arch: sim-arm64, target: iossimulator-xcrun }
-          # - { label: iOS, os: macos-14, arch: sim-x64, target: iossimulator-xcrun } # iOS x64 simulator is currently disabled
+          - { label: iOS, os: macos-14, arch: sim-arm64, target: iossimulator-xcrun, minos: "11.0" }
+          # - { label: iOS, os: macos-14, arch: sim-x64, target: iossimulator-xcrun, minos: "10.14"  } # iOS x64 simulator is currently disabled
         exclude:
           - linkage: shared
             platform: { label: iOS } # iOS is static only
@@ -178,7 +178,7 @@ jobs:
           EXTRA_FLAGS=""
           
           # --- Platform Specific Setup ---
-          if [ "$LABEL" == "macOS" ]; then
+          if [ "$LABEL" == "macOS" ] ; then
             EXTRA_FLAGS="-mmacosx-version-min=${{ matrix.platform.minos }}"
           elif [ "$LABEL" == "Linux" ]; then
             EXTRA_FLAGS="enable-sctp -Wl,-rpath,'\$\$ORIGIN'"
@@ -193,6 +193,7 @@ jobs:
             if [[ "$TARGET" == *"simulator"* ]]; then
               export CROSS_TOP=$(xcode-select -print-path)/Platforms/iPhoneSimulator.platform/Developer
               export CROSS_SDK=iPhoneSimulator.sdk
+              EXTRA_FLAGS="-mios-simulator-version-min=${{ matrix.platform.minos }}"
             else
               export CROSS_TOP=$(xcode-select -print-path)/Platforms/iPhoneOS.platform/Developer
               export CROSS_SDK=iPhoneOS.sdk
