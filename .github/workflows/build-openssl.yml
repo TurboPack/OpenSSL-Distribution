@@ -398,6 +398,12 @@ jobs:
             done
           fi
 
+      - name: Download OpenSSL License
+        shell: bash
+        run: |
+          VERSION="${{ needs.validate-version.outputs.version }}"
+          curl -sSL "https://raw.githubusercontent.com/openssl/openssl/openssl-${{ needs.validate-version.outputs.version }}/LICENSE.txt" -o dist/LICENSE.txt
+          
       - name: Finalize Package
         shell: bash
         run: |
