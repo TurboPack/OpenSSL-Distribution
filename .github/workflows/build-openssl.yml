@@ -361,8 +361,16 @@ jobs:
           SHARED_DIR="raw-binaries/raw-${{ matrix.label }}-${{ matrix.arch }}-shared/usr/local"
           STATIC_DIR="raw-binaries/raw-${{ matrix.label }}-${{ matrix.arch }}-static/usr/local"
           
+          # Fallback for actions/download-artifact single-artifact extraction quirk (iOS)
+          if [ ! -d "$STATIC_DIR" ] && [ -d "raw-binaries/usr/local" ]; then
+            STATIC_DIR="raw-binaries/usr/local"
+          fi
+          if [ ! -d "$SHARED_DIR" ] && [ -d "raw-binaries/usr/local" ]; then
+            SHARED_DIR="raw-binaries/usr/local"
+          fi
+          
           # Handle lib vs lib64 (Linux x64 often defaults to lib64)
-          SHARED_LIB="$SHARED_DIR/lib"
+          SHARED_LIB="$SHARED_DIR/lib" 
           [ -d "$SHARED_DIR/lib64" ] && SHARED_LIB="$SHARED_DIR/lib64"
           
           STATIC_LIB="$STATIC_DIR/lib"
