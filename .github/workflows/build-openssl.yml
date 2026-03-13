@@ -274,6 +274,83 @@ jobs:
           path: raw-binaries
           merge-multiple: false
 
+      - name: Create Base Directories
+        run: |
+          mkdir -p dist/{engines,providers,include,doc,lib/import,lib/static}
+          cp -r common-assets/include/* dist/include/
+          cp -r common-assets/doc/* dist/doc/
+          cp common-assets/LICENSE.txt dist/ || true
+          cp common-assets/README.txt dist/ || true
+          cp build-metadata/version.txt dist/ || true
+
+      - name: Organize Windows
+        if: matrix.label == 'Windows'
+        run: |
+          # Executables & Shared Libs
+          find raw-binaries/raw-*-shared -type f -name "openssl.exe" -exec cp {} dist/ \;
+          find raw-binaries/raw-*-shared -type f -name "*.dll" -exec cp {} dist/ \;
+          
+          # Engines & Providers
+          find raw-binaries/raw-*-shared -path "*/engines*/*.dll" -exec cp {} dist/engines/ \;
+          find raw-binaries/raw-*-shared -path "*/providers*/*.dll" -exec cp {} dist/providers/ \;
+          
+          # Import Libs (Must come from the shared build)
+          find raw-binaries/raw-*-shared -type f -name "*.lib" -exec cp {} dist/lib/import/ \;
+          
+          # True Static Libs (Must come from the static build)
+          find raw-binaries/raw-*-static -type f -name "*.lib" -exec cp {} dist/lib/static/ \;
+
+      - name: Organize Linux
+        if: matrix.label == 'Linux'
+        run: |
+          # Executable
+          find raw-binaries/raw-*-shared -type f -name "openssl" -exec cp {} dist/ \;
+          
+          # Shared Libs: Explicitly EXCLUDE the unversioned physical duplicates
+          # We only want the versioned ones (e.g., libcrypto.so.3)
+          find raw-binaries/raw-*-shared/usr/local/lib* -maxdepth 1 -type f -name "*.so*" ! -name "libcrypto.so" ! -name "libssl.so" -exec cp {} dist/ \;
+          
+          # Engines & Providers
+          find raw-binaries/raw-*-shared -path "*/engines*/*.so" -exec cp {} dist/engines/ \;
+          find raw-binaries/raw-*-shared -path "*/providers*/*.so" -exec cp {} dist/providers/ \;
+          
+          # Static Libs
+          find raw-binaries/raw-*-static -type f -name "*.a" -exec cp {} dist/lib/static/ \;
+          
+          # Generate Symlink Script for end-users
+          cat << 'EOF' > dist/install_symlinks.sh
+          #!/bin/sh
+          ln -sf libcrypto.so.3 libcrypto.so
+          ln -sf libssl.so.3 libssl.so
+          EOF
+          chmod +x dist/install_symlinks.sh
+
+      - name: Organize Android
+        if: matrix.label == 'Android'
+        run: |
+          # Executable
+          find raw-binaries/raw-*-shared -type f -name "openssl" -exec cp {} dist/ \;
+          
+          # Shared Libs: Android does NOT use version suffixes, so we MUST keep libcrypto.so
+          find raw-binaries/raw-*-shared/usr/local/lib* -maxdepth 1 -type f -name "*.so" -exec cp {} dist/ \;
+          
+          # Engines & Providers
+          find raw-binaries/raw-*-shared -path "*/engines*/*.so" -exec cp {} dist/engines/ \;
+          find raw-binaries/raw-*-shared -path "*/providers*/*.so" -exec cp {} dist/providers/ \;
+          
+          # Static Libs
+          find raw-binaries/raw-*-static -type f -name "*.a" -exec cp {} dist/lib/static/ \;
+
+      - name: Organize iOS
+        if: matrix.label == 'iOS'
+        run: |
+          # iOS is Static Only. 
+          # Using a generic find on 'raw-binaries' bypasses the download-artifact single-match quirk entirely!
+          find raw-binaries -type f -name "*.a" -exec cp {} dist/lib/static/ \;
+
+      - name: Cleanup Empty Directories
+        run: find dist -type d -empty -delete    
+      
       - name: Organize & Lipo (macOS Universal)
         if: matrix.label == 'macOS'
         shell: bash
@@ -350,61 +427,6 @@ jobs:
           find raw-binaries/raw-macOS-x64-static/usr/local/lib -maxdepth 1 -type f -name "*.a" | while read -r f; do
             lipo_file "static/usr/local/lib/$(basename "$f")" "dist/lib/static/$(basename "$f")"
           done
-
-      - name: Organize (Standard Platforms)
-        if: matrix.label != 'macOS'
-        shell: bash
-        run: |
-          mkdir -p dist/engines dist/providers dist/lib/static
-          if [ "${{ matrix.label }}" == "Windows" ]; then mkdir -p dist/lib/import; fi
-          
-          SHARED_DIR="raw-binaries/raw-${{ matrix.label }}-${{ matrix.arch }}-shared/usr/local"
-          STATIC_DIR="raw-binaries/raw-${{ matrix.label }}-${{ matrix.arch }}-static/usr/local"
-          
-          # Fallback for actions/download-artifact single-artifact extraction quirk (iOS)
-          if [ ! -d "$STATIC_DIR" ] && [ -d "raw-binaries/usr/local" ]; then
-            STATIC_DIR="raw-binaries/usr/local"
-          fi
-          if [ ! -d "$SHARED_DIR" ] && [ -d "raw-binaries/usr/local" ]; then
-            SHARED_DIR="raw-binaries/usr/local"
-          fi
-          
-          # Handle lib vs lib64 (Linux x64 often defaults to lib64)
-          SHARED_LIB="$SHARED_DIR/lib" 
-          [ -d "$SHARED_DIR/lib64" ] && SHARED_LIB="$SHARED_DIR/lib64"
-          
-          STATIC_LIB="$STATIC_DIR/lib"
-          [ -d "$STATIC_DIR/lib64" ] && STATIC_LIB="$STATIC_DIR/lib64"
-          
-          # Executable
-          [ -f "$SHARED_DIR/bin/openssl" ] && cp "$SHARED_DIR/bin/openssl" dist/
-          [ -f "$SHARED_DIR/bin/openssl.exe" ] && cp "$SHARED_DIR/bin/openssl.exe" dist/
-          
-          # Shared Libs
-          if [ "${{ matrix.label }}" == "Windows" ]; then
-            cp "$SHARED_DIR"/bin/*.dll dist/ 2>/dev/null || true
-            cp "$SHARED_LIB"/*.lib dist/lib/import/ 2>/dev/null || true
-          else
-            # Explicitly exclude unversioned names in case artifacts converted symlinks to copies
-            find "$SHARED_LIB" -maxdepth 1 -type f \( -name "*.so*" -o -name "*.dylib" \) \
-              ! -name "libcrypto.so" ! -name "libssl.so" \
-              ! -name "libcrypto.dylib" ! -name "libssl.dylib" \
-              -exec cp {} dist/ \; 2>/dev/null || true
-          fi
-          
-          # Engines & Providers
-          [ -d "$SHARED_LIB/engines-3" ] && find "$SHARED_LIB/engines-3" -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.dll" \) -exec cp {} dist/engines/ \; 2>/dev/null || true
-          [ -d "$SHARED_LIB/ossl-modules" ] && find "$SHARED_LIB/ossl-modules" -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.dll" \) -exec cp {} dist/providers/ \; 2>/dev/null || true
-          
-          # Static Libs
-          [ -d "$STATIC_LIB" ] && find "$STATIC_LIB" -maxdepth 1 -type f \( -name "*.a" -o -name "*.lib" \) -exec cp {} dist/lib/static/ \; 2>/dev/null || true
-          
-          # Cleanup Unix Symbols (Windows PDBs are naturally ignored because we didn't copy them)
-          if [ "${{ matrix.label }}" != "Windows" ]; then
-            find dist -type f \( -name "*.so*" -o -name "*.a" -o -name "openssl" -o -name "*.dylib" \) | while read -r f; do
-              strip -S "$f" 2>/dev/null || true
-            done
-          fi
 
       - name: Download OpenSSL License
         shell: bash
