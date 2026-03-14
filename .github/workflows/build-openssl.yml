@@ -307,6 +307,7 @@ jobs:
           name: raw-${{ matrix.platform.label }}-${{ matrix.platform.arch }}-${{ matrix.linkage }}
           path: raw_artifact/dist
           retention-days: 1
+          archive: false
 
   # =========================================================================
   # 3. PACKAGE RELEASE (Fan-In Matrix)
