@@ -4,10 +4,6 @@ run-name: Build OpenSSL ${{ inputs.version }} via ${{ github.event_name }}
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'OpenSSL Version or Branch (e.g., 3.4.0 or master)'
-        required: true
-        type: string
       build_type:
         description: 'Build Type'
         required: true
@@ -16,6 +12,10 @@ on:
           - release
           - branch
         default: release
+      version:
+        description: 'OpenSSL Version or Branch (e.g., 3.4.0 or master)'
+        required: true
+        type: string
       ignore_eol:
         description: 'Ignore EOL Check'
         required: false
@@ -28,13 +28,13 @@ on:
         default: false
   workflow_call:
     inputs:
-      version:
-        required: true
-        type: string
       build_type:
         required: false
         type: string
         default: release
+      version:
+        required: true
+        type: string
       ignore_eol:
         required: false
         type: boolean
@@ -555,7 +555,11 @@ jobs:
           cp common-assets/README.txt dist/ 2>/dev/null || true
           
           # Create Metadata
-          echo "${{ needs.validate-version.outputs.version }}" > dist/version.txt
+          if [ "${{ inputs.build_type }}" == "branch" ]; then
+            echo "branch: ${{ needs.validate-version.outputs.version }}" > dist/version.txt
+          else
+            echo "${{ needs.validate-version.outputs.version }}" > dist/version.txt
+          fi
           
           # Create Symlink Script (POSIX only, if not already present)
           if [ ! -f dist/install_symlinks.sh ]; then
