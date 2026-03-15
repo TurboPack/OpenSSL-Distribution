@@ -102,9 +102,12 @@ jobs:
             fi
             
             echo "🔍 Verifying branch/ref '$TARGET_REF' in repository '$TARGET_REPO'..."
-            if ! git ls-remote https://github.com/$TARGET_REPO.git "$TARGET_REF" | grep -q "$TARGET_REF"; then
-              echo "❌ Reference '$TARGET_REF' does not exist in $TARGET_REPO."
-              exit 1
+            # Skip ls-remote check for commit SHAs (40 hex chars)
+            if [[ ! "$TARGET_REF" =~ ^[0-9a-f]{40}$ ]]; then
+              if ! git ls-remote https://github.com/$TARGET_REPO.git "$TARGET_REF" | grep -q "$TARGET_REF"; then
+                echo "❌ Reference '$TARGET_REF' does not exist in $TARGET_REPO."
+                exit 1
+              fi
             fi
             
             TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
