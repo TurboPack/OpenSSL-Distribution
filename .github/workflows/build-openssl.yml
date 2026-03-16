@@ -51,15 +51,21 @@ jobs:
   validate-version:
     name: Validate Inputs
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
     outputs:
       version: ${{ steps.check.outputs.version }}
       target_repo: ${{ steps.check.outputs.target_repo }}
       ref: ${{ steps.check.outputs.ref }}
+      sha: ${{ steps.check.outputs.sha }}
       artifact_version: ${{ steps.check.outputs.artifact_version }}
+      slugified_version: ${{ steps.check.outputs.slugified_version }}
       is_fork: ${{ steps.check.outputs.is_fork }}
     steps:
       - name: Check EOL or Branch Existence
         id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ inputs.version }}"
           BUILD_TYPE="${{ inputs.build_type }}"
@@ -86,7 +92,16 @@ jobs:
               fi
             fi
             TARGET_REF="openssl-$VERSION"
+            
+            echo "🔍 Resolving SHA for tag '$TARGET_REF'..."
+            SHA=$(git ls-remote --tags https://github.com/$TARGET_REPO.git "$TARGET_REF" | awk '{print $1}')
+            if [ -z "$SHA" ]; then
+              echo "❌ Tag '$TARGET_REF' not found in $TARGET_REPO."
+              exit 1
+            fi
+            
             ARTIFACT_VERSION="$VERSION"
+            SLUGIFIED_VERSION="$VERSION"
           else
             # Branch Mode
             if [[ "$VERSION" == */*/* ]]; then
@@ -94,32 +109,40 @@ jobs:
               TARGET_REPO=$(echo "$VERSION" | cut -d'/' -f1,2)
               TARGET_REF=$(echo "$VERSION" | cut -d'/' -f3-)
               IS_FORK="true"
-              USER_PART=$(echo "$VERSION" | cut -d'/' -f1)
-              ARTIFACT_PART="${USER_PART}_${TARGET_REF}"
             else
               TARGET_REF="$VERSION"
-              ARTIFACT_PART="$VERSION"
             fi
             
-            echo "🔍 Verifying branch/ref '$TARGET_REF' in repository '$TARGET_REPO'..."
-            # Skip ls-remote check for commit SHAs (40 hex chars)
-            if [[ ! "$TARGET_REF" =~ ^[0-9a-f]{40}$ ]]; then
-              if ! git ls-remote https://github.com/$TARGET_REPO.git "$TARGET_REF" | grep -q "$TARGET_REF"; then
+            echo "🔍 Resolving SHA for branch/ref '$TARGET_REF' in repository '$TARGET_REPO'..."
+            SHA=$(git ls-remote https://github.com/$TARGET_REPO.git "$TARGET_REF" | awk '{print $1}')
+            
+            if [ -z "$SHA" ]; then
+              # Check if it's already a SHA
+              if [[ "$TARGET_REF" =~ ^[0-9a-f]{40}$ ]]; then
+                SHA="$TARGET_REF"
+              else
                 echo "❌ Reference '$TARGET_REF' does not exist in $TARGET_REPO."
                 exit 1
               fi
             fi
             
             TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
-            # Slugify and truncate ARTIFACT_PART
-            SAFE_PART=$(echo "$ARTIFACT_PART" | sed 's/\//_/g' | cut -c 1-100)
+            # Slugify the whole version input (e.g. user/repo/branch -> user_repo_branch)
+            SLUGIFIED_VERSION=$(echo "$VERSION" | sed 's/\//_/g')
+            # Truncate for filename safety
+            SAFE_PART=$(echo "$SLUGIFIED_VERSION" | cut -c 1-100)
             ARTIFACT_VERSION="${SAFE_PART}_${TIMESTAMP}"
           fi
+          
+          # Dynamically update the Run Name for better visibility in UI
+          gh run edit ${{ github.run_id }} --name "Build OpenSSL $SLUGIFIED_VERSION via ${{ github.event_name }}" || true
           
           echo "target_repo=$TARGET_REPO" >> $GITHUB_OUTPUT
           echo "is_fork=$IS_FORK" >> $GITHUB_OUTPUT
           echo "ref=$TARGET_REF" >> $GITHUB_OUTPUT
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
           echo "artifact_version=$ARTIFACT_VERSION" >> $GITHUB_OUTPUT
+          echo "slugified_version=$SLUGIFIED_VERSION" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
   # =========================================================================
@@ -133,7 +156,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: ${{ needs.validate-version.outputs.target_repo }}
-          ref: ${{ needs.validate-version.outputs.ref }}
+          ref: ${{ needs.validate-version.outputs.sha }}
       
       - name: Build Common Assets
         run: |
@@ -229,7 +252,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: ${{ needs.validate-version.outputs.target_repo }}
-          ref: ${{ needs.validate-version.outputs.ref }}
+          ref: ${{ needs.validate-version.outputs.sha }}
 
       - name: Compile Windows (Standard)
         if: matrix.platform.label == 'Windows' && matrix.platform.arch != 'arm64ec'
@@ -582,9 +605,9 @@ jobs:
           
           # Create Metadata
           if [ "${{ inputs.build_type }}" == "branch" ]; then
-            echo "branch: ${{ needs.validate-version.outputs.version }}" > dist/version.txt
+            echo "branch: ${{ needs.validate-version.outputs.slugified_version }}" > dist/version.txt
           else
-            echo "${{ needs.validate-version.outputs.version }}" > dist/version.txt
+            echo "${{ needs.validate-version.outputs.slugified_version }}" > dist/version.txt
           fi
           
           # Create Symlink Script (POSIX only, if not already present)
