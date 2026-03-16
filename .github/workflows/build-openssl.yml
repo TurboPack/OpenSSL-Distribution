@@ -5,15 +5,15 @@ on:
   workflow_dispatch:
     inputs:
       build_type:
-        description: 'Build Type'
+        description: 'Build Source'
         required: true
         type: choice
         options:
           - release
-          - branch
+          - branch or fork
         default: release
       version:
-        description: 'Version or Fork (e.g. 3.4.0, master, or user/repo/branch)'
+        description: 'OpenSSL Release Version, OpenSSL Branch Name or OpenSSL Fork Repo(e.g. 3.4.0, master, or user/repo/branch)'
         required: true
         type: string
       ignore_eol:
