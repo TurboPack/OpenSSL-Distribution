@@ -14,7 +14,7 @@ on:
 
   # Automatic Trigger (Chained)
   workflow_run:
-    workflows: ["Build OpenSSL 3.x"]
+    workflows: ["Build OpenSSL"]
     types:
       - completed
     branches:
