@@ -212,7 +212,7 @@ jobs:
       - name: Upload Common Assets
         uses: actions/upload-artifact@v7
         with:
-          name: openssl-common-assets
+          name: openssl-common-assets-${{ github.run_id }}
           path: common-assets/usr/local
           retention-days: 1
 
@@ -444,7 +444,7 @@ jobs:
       - name: Upload Raw Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: raw-${{ matrix.platform.label }}-${{ matrix.platform.arch }}-${{ matrix.linkage }}
+          name: raw-${{ matrix.platform.label }}-${{ matrix.platform.arch }}-${{ matrix.linkage }}-${{ github.run_id }}
           path: raw_artifact/dist
           retention-days: 1
 
@@ -484,14 +484,14 @@ jobs:
       - name: Download Common Assets
         uses: actions/download-artifact@v7
         with:
-          name: openssl-common-assets
+          name: openssl-common-assets-${{ github.run_id }}
           path: common-assets
           
       - name: Download Raw Binaries (Standard)
         if: matrix.label != 'macOS'
         uses: actions/download-artifact@v7
         with:
-          pattern: raw-${{ matrix.label }}-${{ matrix.arch }}-*
+          pattern: raw-${{ matrix.label }}-${{ matrix.arch }}-*-${{ github.run_id }}
           path: raw-binaries
           merge-multiple: false
           
@@ -499,7 +499,7 @@ jobs:
         if: matrix.label == 'macOS'
         uses: actions/download-artifact@v7
         with:
-          pattern: raw-macOS-*
+          pattern: raw-macOS-*-${{ github.run_id }}
           path: raw-binaries
           merge-multiple: false
 
@@ -531,6 +531,17 @@ jobs:
             echo "Detected flattened artifact structure. Merging raw-binaries/ directly..."
             cp -R raw-binaries/. dist/
           fi
+
+      - name: Rename macOS artifacts (remove run_id suffix)
+        if: matrix.label == 'macOS'
+        shell: bash
+        run: |
+          cd raw-binaries
+          for d in raw-macOS-*-${{ github.run_id }}; do
+            if [ -d "$d" ]; then
+              mv "$d" "${d%-*}"
+            fi
+          done
 
       - name: Organize & Lipo (macOS Universal)
         if: matrix.label == 'macOS'
@@ -691,11 +702,12 @@ jobs:
         run: |
           echo "Fetching artifacts for run ${{ github.run_id }}..."
           
-          # Use gh api to list artifacts
-          ARTIFACTS=$(gh api repos/${{ github.repository }}/actions/artifacts --paginate)
+          # Use gh api to list artifacts specifically for THIS run to avoid conflicts
+          ARTIFACTS=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --paginate)
           
           # Filter for IDs of artifacts that start with 'raw-' or are 'openssl-common-assets'
-          IDS=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select (.name | startswith("raw-") or . == "openssl-common-assets") | .id')
+          # We also verify the name ends with the run_id for triple-redundancy
+          IDS=$(echo "$ARTIFACTS" | jq -r ".artifacts[] | select (.name | (startswith(\"raw-\") and endswith(\"-${{ github.run_id }}\")) or . == \"openssl-common-assets-${{ github.run_id }}\") | .id")
           
           if [ -z "$IDS" ] || [ "$IDS" == "null" ]; then
             echo "No intermediate artifacts found to delete."
