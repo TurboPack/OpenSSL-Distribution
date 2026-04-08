@@ -1,6 +1,6 @@
 # OpenSSL Distribution
 
-This repository provides **Automated, Cross-Platform Pre-compiled Binaries** for the [OpenSSL 3.x](https://www.openssl.org/) cryptography library.
+This repository provides **Automated, Cross-Platform Pre-compiled Binaries** for the [OpenSSL 3.x and 4.x](https://www.openssl.org/) cryptography library.
 
 The binaries are built automatically via GitHub Actions to ensure a clean, reproducible, and secure supply chain.
 
