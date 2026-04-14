@@ -75,15 +75,16 @@ jobs:
           IS_FORK="false"
           
           if [ "$BUILD_TYPE" == "release" ]; then
-            MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
-            EOL_DATE=$(curl -s https://endoflife.date/api/openssl.json | jq -r ".[] | select(.cycle == \"$MAJOR_MINOR\") | .eol")
-            
+           MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
+            EOL_DATE=$(curl -s  https://raw.githubusercontent.com/openssl/release-metadata/refs/heads/main/data.json | jq -r ".[\"$MAJOR_MINOR\"].eol")
+            EOL_DATE=$(echo "$EOL_DATE" | date -d "$EOL_DATE" +%s 2>/dev/null || date -d "01 $EOL_DATE" +%s 2>/dev/null || echo 0)
+
             if [ -z "$EOL_DATE" ] || [ "$EOL_DATE" == "null" ]; then
               echo "⚠️ Could not determine EOL date for $MAJOR_MINOR. Proceeding cautiously."
             else
-              TODAY=$(date +%Y-%m-%d)
+              TODAY=$(date +%s)
               if [[ "$TODAY" > "$EOL_DATE" ]]; then
-                echo "❌ OpenSSL $MAJOR_MINOR reached EOL on $EOL_DATE."
+                echo "❌ OpenSSL $MAJOR_MINOR reached EOL on $(date -d "@$EOL_DATE" +%Y-%m-%d) ."
                 if [ "$IGNORE_EOL" != "true" ]; then
                   echo "Aborting build. Check 'Ignore EOL' to override."
                   exit 1
@@ -92,7 +93,7 @@ jobs:
               fi
             fi
             TARGET_REF="openssl-$VERSION"
-            
+
             echo "🔍 Resolving SHA for tag '$TARGET_REF'..."
             SHA=$(git ls-remote --tags https://github.com/$TARGET_REPO.git "$TARGET_REF" | awk '{print $1}')
             if [ -z "$SHA" ]; then
@@ -263,7 +264,7 @@ jobs:
           
           :: --- SHARED BUILD ---
           if "${{ matrix.linkage }}"=="shared" (
-            perl Configure %TARGET% --prefix="%PREFIX%" shared no-tests -D_WIN32_WINNT=0x0A00
+            perl Configure %TARGET% --prefix="%PREFIX%" shared no-tests "CFLAGS=/MD /Zi -D_WIN32_WINNT=0x0A00" "LDFLAGS=/nodefaultlib:libucrt.lib /defaultlib:ucrt.lib /DEBUG"
           )
           
           :: --- STATIC BUILD ---
