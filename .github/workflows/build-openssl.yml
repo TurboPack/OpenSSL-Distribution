@@ -75,15 +75,16 @@ jobs:
           IS_FORK="false"
           
           if [ "$BUILD_TYPE" == "release" ]; then
-            MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
-            EOL_DATE=$(curl -s https://endoflife.date/api/openssl.json | jq -r ".[] | select(.cycle == \"$MAJOR_MINOR\") | .eol")
-            
+           MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
+            EOL_DATE=$(curl -s  https://raw.githubusercontent.com/openssl/release-metadata/refs/heads/main/data.json | jq -r ".[\"$MAJOR_MINOR\"].eol")
+            EOL_DATE=$(echo "$EOL_DATE" | date -d "$EOL_DATE" +%s 2>/dev/null || date -d "01 $EOL_DATE" +%s 2>/dev/null || echo 0)
+
             if [ -z "$EOL_DATE" ] || [ "$EOL_DATE" == "null" ]; then
               echo "⚠️ Could not determine EOL date for $MAJOR_MINOR. Proceeding cautiously."
             else
-              TODAY=$(date +%Y-%m-%d)
+              TODAY=$(date +%s)
               if [[ "$TODAY" > "$EOL_DATE" ]]; then
-                echo "❌ OpenSSL $MAJOR_MINOR reached EOL on $EOL_DATE."
+                echo "❌ OpenSSL $MAJOR_MINOR reached EOL on $(date -d "@$EOL_DATE" +%Y-%m-%d) ."
                 if [ "$IGNORE_EOL" != "true" ]; then
                   echo "Aborting build. Check 'Ignore EOL' to override."
                   exit 1
@@ -92,7 +93,7 @@ jobs:
               fi
             fi
             TARGET_REF="openssl-$VERSION"
-            
+
             echo "🔍 Resolving SHA for tag '$TARGET_REF'..."
             SHA=$(git ls-remote --tags https://github.com/$TARGET_REPO.git "$TARGET_REF" | awk '{print $1}')
             if [ -z "$SHA" ]; then
@@ -227,8 +228,8 @@ jobs:
       matrix:
         linkage: [shared, static]
         platform:
-          - { label: Windows, os: windows-latest, arch: x64, target: VC-WIN64A, vcvars: amd64 }
-          - { label: Windows, os: windows-latest, arch: x86, target: VC-WIN32, vcvars: x86 }
+          - { label: Windows, os: windows-latest, arch: x64, target: VC-WIN64A-HYBRIDCRT, vcvars: amd64 }
+          - { label: Windows, os: windows-latest, arch: x86, target: VC-WIN32-HYBRIDCRT, vcvars: x86 }
           # - { label: Windows, os: windows-latest, arch: arm64, target: VC-WIN64-ARM, vcvars: amd64_arm64 } # ARM64 build is currently disabled due possible confusion with ARM64EC
           - { label: Windows, os: windows-latest, arch: arm64ec, target: VC-WIN64-ARM, vcvars: amd64_arm64 }
           - { label: Linux, os: ubuntu-latest, arch: x64, target: linux-x86_64 }
@@ -263,12 +264,12 @@ jobs:
           
           :: --- SHARED BUILD ---
           if "${{ matrix.linkage }}"=="shared" (
-            perl Configure %TARGET% --prefix="%PREFIX%" shared no-tests -D_WIN32_WINNT=0x0A00
+            perl Configure %TARGET% --prefix="%PREFIX%" shared no-makedepend no-tests no-docs "CFLAGS=-D_WIN32_WINNT=0x0A00" 
           )
           
           :: --- STATIC BUILD ---
           if "${{ matrix.linkage }}"=="static" (
-            perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-tests "CFLAGS=/MD -D_WIN32_WINNT=0x0A00" || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-module no-tests "CFLAGS=/MD -D_WIN32_WINNT=0x0A00"
+            perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-makedepend no-tests no-docs "CFLAGS=-D_WIN32_WINNT=0x0A00" || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-module no-makedepend no-tests no-docs "CFLAGS=-D_WIN32_WINNT=0x0A00"
           )
           
           nmake && nmake install_sw
@@ -284,12 +285,12 @@ jobs:
           
           :: --- SHARED BUILD ---
           if "${{ matrix.linkage }}"=="shared" (
-            perl Configure %TARGET% --prefix="%PREFIX%" shared no-tests no-asm "CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00" "LDFLAGS=/MACHINE:ARM64EC /DEBUG" "ARFLAGS=/MACHINE:ARM64EC"
+            perl Configure %TARGET% --prefix="%PREFIX%" shared no-makedepend no-tests no-docs no-asm "CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00" "LDFLAGS=/MACHINE:ARM64EC /nodefaultlib:libucrt.lib /defaultlib:ucrt.lib /DEBUG" "ARFLAGS=/MACHINE:ARM64EC"
           )
           
           :: --- STATIC BUILD ---
           if "${{ matrix.linkage }}"=="static" (
-            perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-tests no-asm "CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00 /MD" "LDFLAGS=/MACHINE:ARM64EC /DEBUG" "ARFLAGS=/MACHINE:ARM64EC" || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-module no-tests no-asm "CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00 /MD" "LDFLAGS=/MACHINE:ARM64EC /DEBUG" "ARFLAGS=/MACHINE:ARM64EC"
+            perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-makedepend no-tests no-docs no-asm "CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00 /MD" "LDFLAGS=/MACHINE:ARM64EC /DEBUG" "ARFLAGS=/MACHINE:ARM64EC" || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-makedepend no-tests no-docs no-asm "CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00 /MD" "LDFLAGS=/MACHINE:ARM64EC /DEBUG" "ARFLAGS=/MACHINE:ARM64EC"
           )
           
           nmake && nmake install_sw
