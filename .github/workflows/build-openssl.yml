@@ -228,8 +228,8 @@ jobs:
       matrix:
         linkage: [shared, static]
         platform:
-          - { label: Windows, os: windows-latest, arch: x64, target: VC-WIN64A, vcvars: amd64 }
-          - { label: Windows, os: windows-latest, arch: x86, target: VC-WIN32, vcvars: x86 }
+          - { label: Windows, os: windows-latest, arch: x64, target: VC-WIN64A-HYBRIDCRT, vcvars: amd64 }
+          - { label: Windows, os: windows-latest, arch: x86, target: VC-WIN32-HYBRIDCRT, vcvars: x86 }
           # - { label: Windows, os: windows-latest, arch: arm64, target: VC-WIN64-ARM, vcvars: amd64_arm64 } # ARM64 build is currently disabled due possible confusion with ARM64EC
           - { label: Windows, os: windows-latest, arch: arm64ec, target: VC-WIN64-ARM, vcvars: amd64_arm64 }
           - { label: Linux, os: ubuntu-latest, arch: x64, target: linux-x86_64 }
@@ -264,12 +264,12 @@ jobs:
           
           :: --- SHARED BUILD ---
           if "${{ matrix.linkage }}"=="shared" (
-            perl Configure %TARGET% --prefix="%PREFIX%" shared no-tests "CFLAGS=/MD /Zi -D_WIN32_WINNT=0x0A00" "LDFLAGS=/nodefaultlib:libucrt.lib /defaultlib:ucrt.lib /DEBUG"
+            perl Configure %TARGET% --prefix="%PREFIX%" shared no-tests "CFLAGS=-D_WIN32_WINNT=0x0A00" 
           )
           
           :: --- STATIC BUILD ---
           if "${{ matrix.linkage }}"=="static" (
-            perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-tests "CFLAGS=/MD -D_WIN32_WINNT=0x0A00" || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-module no-tests "CFLAGS=/MD -D_WIN32_WINNT=0x0A00"
+            perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-tests "CFLAGS=-D_WIN32_WINNT=0x0A00" || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-module no-tests "CFLAGS=-D_WIN32_WINNT=0x0A00"
           )
           
           nmake && nmake install_sw
