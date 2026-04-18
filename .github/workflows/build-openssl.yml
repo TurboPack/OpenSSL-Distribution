@@ -228,20 +228,17 @@ jobs:
       matrix:
         linkage: [shared, static]
         platform:
-          - { label: Windows, os: windows-latest, arch: x64, target: VC-WIN64A-HYBRIDCRT, vcvars: amd64 }
-          - { label: Windows, os: windows-latest, arch: x86, target: VC-WIN32-HYBRIDCRT, vcvars: x86 }
-          # - { label: Windows, os: windows-latest, arch: arm64, target: VC-WIN64-ARM, vcvars: amd64_arm64 } # ARM64 build is currently disabled due possible confusion with ARM64EC
-          - { label: Windows, os: windows-latest, arch: arm64ec, target: VC-WIN64-ARM, vcvars: amd64_arm64 }
+          - { label: Windows, os: windows-latest, arch: x64, target: VC-WIN64A, vcvars: amd64 }
+          - { label: Windows, os: windows-latest, arch: x86, target: VC-WIN32, vcvars: x86 }
+          - { label: Windows, os: windows-latest, arch: arm64ec, target: VC-ARM64EC, vcvars: amd64_arm64 }
           - { label: Linux, os: ubuntu-latest, arch: x64, target: linux-x86_64 }
           - { label: Linux, os: ubuntu-latest, arch: arm64, target: linux-aarch64 }
           - { label: macOS, os: macos-14, arch: x64, target: darwin64-x86_64-cc, minos: "10.14" }
           - { label: macOS, os: macos-14, arch: arm64, target: darwin64-arm64-cc, minos: "11.0" }
-          # - { label: Android, os: ubuntu-latest, arch: x64, target: android-x86_64, api: 21 } # Android x64 build is currently disabled as Delphi is not supporting Android x86 builds
           - { label: Android, os: ubuntu-latest, arch: arm64, target: android-arm64, api: 21 }
           - { label: Android, os: ubuntu-latest, arch: arm, target: android-arm, api: 21 }
           - { label: iOS, os: macos-14, arch: arm64, target: ios64-cross }
           - { label: iOS, os: macos-14, arch: sim-arm64, target: iossimulator-xcrun, minos: "11.0" }
-          # - { label: iOS, os: macos-14, arch: sim-x64, target: iossimulator-xcrun, minos: "10.14"  } # iOS x64 simulator is currently disabled
         exclude:
           - linkage: shared
             platform: { label: iOS } # iOS is static only
@@ -253,67 +250,141 @@ jobs:
           repository: ${{ needs.validate-version.outputs.target_repo }}
           ref: ${{ needs.validate-version.outputs.sha }}
 
-      - name: Compile Windows (Standard)
-        if: matrix.platform.label == 'Windows' && matrix.platform.arch != 'arm64ec'
-        shell: cmd
+      - name: Prepare Windows Targets
+        if: matrix.platform.label == 'Windows'
+        shell: bash
         run: |
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.platform.vcvars }}
-          
-          set "PREFIX=%GITHUB_WORKSPACE%\raw_artifact\usr\local"
-          set "TARGET=${{ matrix.platform.target }}"
-          
-          :: --- SHARED BUILD ---
-          if "${{ matrix.linkage }}"=="shared" (
-            perl Configure %TARGET% --prefix="%PREFIX%" shared no-makedepend no-tests no-docs "CFLAGS=-D_WIN32_WINNT=0x0A00" 
-          )
-          
-          :: --- STATIC BUILD ---
-          if "${{ matrix.linkage }}"=="static" (
-            perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-makedepend no-tests no-docs "CFLAGS=-D_WIN32_WINNT=0x0A00" || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-module no-makedepend no-tests no-docs "CFLAGS=-D_WIN32_WINNT=0x0A00"
-          )
-          
-          nmake && nmake install_sw
+          cat << 'EOF' > Configurations/99-win-hybridcrt.conf
+          my %targets = (
+              # =========================================================================
+              # x64 HybridCRT Targets
+              # =========================================================================
+              "VC-WIN64A-SHARED" => {
+                  inherit_from => [ "VC-WIN64A" ],
+                  disable      => [ "tests", "makedepend", "docs" ],
+                  cflags       => sub {
+                      my $f = join(" ", @_);
+                      $f =~ s/\/MDd?\b//g;                 # Remove Dynamic CRT
+                      return "$f /MT /Zi";                 # Force Static CRT + Debug Symbols
+                  },
+                  lflags       => sub {
+                      my $f = join(" ", @_);
+                      return "$f /debug /NODEFAULTLIB:libucrt.lib /DEFAULTLIB:ucrt.lib";
+                  },
+              },
+              "VC-WIN64A-STATIC" => {
+                  inherit_from => [ "VC-WIN64A" ],
+                  disable      => [ "shared", "module", "tests", "makedepend", "docs" ],
+                  cflags       => sub {
+                      my $f = join(" ", @_);
+                      $f =~ s/\/MDd?\b//g;
+                      return "$f /MT /Zi";
+                  },
+                  lflags       => sub {
+                      my $f = join(" ", @_);
+                      return "$f /debug /NODEFAULTLIB:libucrt.lib /DEFAULTLIB:ucrt.lib";
+                  },
+              },
 
-      - name: Compile Windows (ARM64EC)
-        if: matrix.platform.label == 'Windows' && matrix.platform.arch == 'arm64ec'
-        shell: cmd
-        run: |
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.platform.vcvars }}
-          
-          set "PREFIX=%GITHUB_WORKSPACE%\raw_artifact\usr\local"
-          set "TARGET=${{ matrix.platform.target }}"
-          
-          :: --- SHARED BUILD ---
-          if "${{ matrix.linkage }}"=="shared" (
-            perl Configure %TARGET% --prefix="%PREFIX%" shared no-makedepend no-tests no-docs no-asm "CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00" "LDFLAGS=/MACHINE:ARM64EC /nodefaultlib:libucrt.lib /defaultlib:ucrt.lib /DEBUG" "ARFLAGS=/MACHINE:ARM64EC"
-          )
-          
-          :: --- STATIC BUILD ---
-          if "${{ matrix.linkage }}"=="static" (
-            perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-makedepend no-tests no-docs no-asm "CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00 /MD" "LDFLAGS=/MACHINE:ARM64EC /DEBUG" "ARFLAGS=/MACHINE:ARM64EC" || perl Configure %TARGET% --prefix="%PREFIX%" no-shared no-apps no-module no-makedepend no-tests no-docs no-asm "CFLAGS=/nologo /arm64EC /O1 /Zi /D_WIN32_WINNT=0x0A00 /MD" "LDFLAGS=/MACHINE:ARM64EC /DEBUG" "ARFLAGS=/MACHINE:ARM64EC"
-          )
-          
-          nmake && nmake install_sw
+              # =========================================================================
+              # x86 HybridCRT Targets
+              # =========================================================================
+              "VC-WIN32-SHARED" => {
+                  inherit_from => [ "VC-WIN32" ],
+                  disable      => [ "tests", "makedepend", "docs" ],
+                  cflags       => sub {
+                      my $f = join(" ", @_);
+                      $f =~ s/\/MDd?\b//g;
+                      return "$f /MT /Zi";
+                  },
+                  lflags       => sub {
+                      my $f = join(" ", @_);
+                      return "$f /debug /NODEFAULTLIB:libucrt.lib /DEFAULTLIB:ucrt.lib";
+                  },
+              },
+              "VC-WIN32-STATIC" => {
+                  inherit_from => [ "VC-WIN32" ],
+                  disable      => [ "shared", "module", "tests", "makedepend", "docs" ],
+                  cflags       => sub {
+                      my $f = join(" ", @_);
+                      $f =~ s/\/MDd?\b//g;
+                      return "$f /MT /Zi";
+                  },
+                  lflags       => sub {
+                      my $f = join(" ", @_);
+                      return "$f /debug /NODEFAULTLIB:libucrt.lib /DEFAULTLIB:ucrt.lib";
+                  },
+              },
 
-      - name: Organize Windows Binaries
+              # =========================================================================
+              # ARM64EC HybridCRT Targets
+              # =========================================================================
+              "VC-ARM64EC-SHARED" => {
+                  inherit_from => [ "VC-WIN64-ARM" ],
+                  disable      => [ "asm", "tests", "makedepend", "docs" ],
+                  CFLAGS       => "/W3 /wd4090 /wd4267 /wd4244 /nologo /O1 /Zi",
+                  ARFLAGS      => "/nologo /MACHINE:ARM64EC",
+                  cflags       => sub {
+                      my $f = join(" ", @_);
+                      $f =~ s/\/MDd?\b//g;                 # Remove Dynamic CRT
+                      $f =~ s/\/arm64\b//ig;               # Remove standard ARM64 flag
+                      return "$f /MT /arm64EC /D_WIN32_WINNT=0x0A00";
+                  },
+                  lflags       => sub {
+                      my $f = join(" ", @_);
+                      $f =~ s/\/MACHINE:ARM64\b//ig;       # Remove conflicting machine type
+                      return "$f /debug /MACHINE:ARM64EC /NODEFAULTLIB:libucrt.lib /DEFAULTLIB:ucrt.lib";
+                  },
+              },
+              "VC-ARM64EC-STATIC" => {
+                  inherit_from => [ "VC-WIN64-ARM" ],
+                  disable      => [ "shared", "module", "asm", "tests", "makedepend", "docs" ],
+                  CFLAGS       => "/W3 /wd4090 /wd4267 /wd4244 /nologo /O1 /Zi",
+                  ARFLAGS      => "/nologo /MACHINE:ARM64EC",
+                  cflags       => sub {
+                      my $f = join(" ", @_);
+                      $f =~ s/\/MDd?\b//g;
+                      $f =~ s/\/arm64\b//ig;
+                      return "$f /MT /arm64EC /D_WIN32_WINNT=0x0A00";
+                  },
+                  lflags       => sub {
+                      my $f = join(" ", @_);
+                      $f =~ s/\/MACHINE:ARM64\b//ig;
+                      return "$f /debug /MACHINE:ARM64EC /NODEFAULTLIB:libucrt.lib /DEFAULTLIB:ucrt.lib";
+                  },
+              },
+          );
+          EOF
+
+      - name: Compile and Stage Windows Binaries
         if: matrix.platform.label == 'Windows'
         shell: cmd
         run: |
-          set "PREFIX=%GITHUB_WORKSPACE%\raw_artifact\usr\local"
-          mkdir raw_artifact\dist
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.platform.vcvars }}
           
+          set "INSTALL_TEMP=%GITHUB_WORKSPACE%\temp_install"
+          :: Use the original raw_artifact\dist path so it matches POSIX perfectly
+          set "STAGED=%GITHUB_WORKSPACE%\raw_artifact\dist"
+          mkdir "%STAGED%\lib\static" "%STAGED%\lib\import" "%STAGED%\engines" "%STAGED%\providers"
+
+          :: Construct Target Name dynamically (e.g., VC-WIN64A-SHARED)
+          set "LINK_UPPER=${{ matrix.linkage }}"
+          if "%LINK_UPPER%"=="shared" (set "TARGET_NAME=${{ matrix.platform.target }}-SHARED") else (set "TARGET_NAME=${{ matrix.platform.target }}-STATIC")
+
+          cd openssl-src
+          perl Configure %TARGET_NAME% --prefix="%INSTALL_TEMP%"
+          nmake && nmake install_sw
+
+          :: Organize into Staged Structure (Matching the ORIGINAL layout)
           if "${{ matrix.linkage }}"=="shared" (
-            mkdir raw_artifact\dist\engines
-            mkdir raw_artifact\dist\providers
-            mkdir raw_artifact\dist\lib\import
-            copy "%PREFIX%\bin\openssl.exe" raw_artifact\dist\
-            copy "%PREFIX%\bin\*.dll" raw_artifact\dist\
-            for /d %%d in ("%PREFIX%\lib\engines-*") do copy "%%d\*.dll" raw_artifact\dist\engines\
-            for /d %%d in ("%PREFIX%\lib\ossl-modules*") do copy "%%d\*.dll" raw_artifact\dist\providers\
-            copy "%PREFIX%\lib\*.lib" raw_artifact\dist\lib\import\
+              :: Copy exe and dlls to the ROOT of the artifact, not a bin/ folder!
+              if exist "%INSTALL_TEMP%\bin\openssl.exe" copy "%INSTALL_TEMP%\bin\openssl.exe" "%STAGED%\"
+              copy "%INSTALL_TEMP%\bin\*.dll" "%STAGED%\"
+              copy "%INSTALL_TEMP%\lib\*.lib" "%STAGED%\lib\import\"
+              if exist "%INSTALL_TEMP%\lib\engines-3" copy "%INSTALL_TEMP%\lib\engines-3\*.dll" "%STAGED%\engines\"
+              if exist "%INSTALL_TEMP%\lib\ossl-modules" copy "%INSTALL_TEMP%\lib\ossl-modules\*.dll" "%STAGED%\providers\"
           ) else (
-            mkdir raw_artifact\dist\lib\static
-            copy "%PREFIX%\lib\*.lib" raw_artifact\dist\lib\static\
+              copy "%INSTALL_TEMP%\lib\*.lib" "%STAGED%\lib\static\"
           )
 
       - name: Install Linux Dependencies
@@ -448,7 +519,7 @@ jobs:
           name: raw-${{ matrix.platform.label }}-${{ matrix.platform.arch }}-${{ matrix.linkage }}-${{ github.run_id }}
           path: raw_artifact/dist
           retention-days: 1
-
+          
   # =========================================================================
   # 3. PACKAGE RELEASE (Fan-In Matrix)
   # =========================================================================
@@ -462,13 +533,11 @@ jobs:
           # Windows packaging moved to ubuntu-latest for speed and native 'zip' support
           - { label: Windows, arch: x64, runner: ubuntu-latest }
           - { label: Windows, arch: x86, runner: ubuntu-latest }
-          # - { label: Windows, arch: arm64, runner: ubuntu-latest } # Windows arm64 package is disabled
           - { label: Windows, arch: arm64ec, runner: ubuntu-latest }
           
           # Linux & Android
           - { label: Linux, arch: x64, runner: ubuntu-latest }
           - { label: Linux, arch: arm64, runner: ubuntu-latest }
-          # - { label: Android, arch: x64, runner: ubuntu-latest } # Android x64 package is disabled
           - { label: Android, arch: arm64, runner: ubuntu-latest }
           - { label: Android, arch: arm, runner: ubuntu-latest }
           
@@ -476,7 +545,6 @@ jobs:
           - { label: macOS, arch: universal, runner: macos-14 }
           - { label: iOS, arch: arm64, runner: macos-14 }
           - { label: iOS, arch: sim-arm64, runner: macos-14 }
-          # - { label: iOS, arch: sim-x64, runner: macos-14 } #iOS x64 simulator package is disabled
           
     runs-on: ${{ matrix.runner }}
     steps:
