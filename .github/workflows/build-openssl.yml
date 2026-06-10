@@ -261,7 +261,7 @@ jobs:
               # =========================================================================
               "VC-WIN64A-SHARED" => {
                   inherit_from => [ "VC-WIN64A" ],
-                  disable      => [ "tests", "makedepend", "docs" ],
+                  disable      => [ "tests", "makedepend", "__DOCS__" ],
                   cflags       => sub {
                       my $f = join(" ", @_);
                       $f =~ s/\/MDd?\b//g;                 # Remove Dynamic CRT
@@ -274,7 +274,7 @@ jobs:
               },
               "VC-WIN64A-STATIC" => {
                   inherit_from => [ "VC-WIN64A" ],
-                  disable      => [ "shared", "module", "tests", "makedepend", "docs" ],
+                  disable      => [ "shared", "module", "tests", "makedepend", "__DOCS__" ],
                   cflags       => sub {
                       my $f = join(" ", @_);
                       $f =~ s/\/MDd?\b//g;
@@ -291,7 +291,7 @@ jobs:
               # =========================================================================
               "VC-WIN32-SHARED" => {
                   inherit_from => [ "VC-WIN32" ],
-                  disable      => [ "tests", "makedepend", "docs" ],
+                  disable      => [ "tests", "makedepend", "__DOCS__" ],
                   cflags       => sub {
                       my $f = join(" ", @_);
                       $f =~ s/\/MDd?\b//g;
@@ -304,7 +304,7 @@ jobs:
               },
               "VC-WIN32-STATIC" => {
                   inherit_from => [ "VC-WIN32" ],
-                  disable      => [ "shared", "module", "tests", "makedepend", "docs" ],
+                  disable      => [ "shared", "module", "tests", "makedepend", "__DOCS__" ],
                   cflags       => sub {
                       my $f = join(" ", @_);
                       $f =~ s/\/MDd?\b//g;
@@ -321,7 +321,7 @@ jobs:
               # =========================================================================
               "VC-ARM64EC-SHARED" => {
                   inherit_from => [ "VC-WIN64-ARM" ],
-                  disable      => [ "asm", "tests", "makedepend", "docs" ],
+                  disable      => [ "asm", "tests", "makedepend", "__DOCS__" ],
                   CFLAGS       => "/W3 /wd4090 /wd4267 /wd4244 /nologo /O1 /Zi",
                   ARFLAGS      => "/nologo /MACHINE:ARM64EC",
                   cflags       => sub {
@@ -338,7 +338,7 @@ jobs:
               },
               "VC-ARM64EC-STATIC" => {
                   inherit_from => [ "VC-WIN64-ARM" ],
-                  disable      => [ "shared", "module", "asm", "tests", "makedepend", "docs" ],
+                  disable      => [ "shared", "module", "asm", "tests", "makedepend", "__DOCS__" ],
                   CFLAGS       => "/W3 /wd4090 /wd4267 /wd4244 /nologo /O1 /Zi",
                   ARFLAGS      => "/nologo /MACHINE:ARM64EC",
                   cflags       => sub {
@@ -355,6 +355,15 @@ jobs:
               },
           );
           EOF
+          
+          # Check if the 'no-docs' option is documented in INSTALL.md (introduced in 3.2.0)
+          if grep -q "no-docs" INSTALL.md; then
+            echo "Feature 'docs' is supported. Disabling it in config."
+            sed -i 's/"__DOCS__"/"docs"/g' Configurations/99-win-hybridcrt.conf
+          else
+            echo "Feature 'docs' is NOT supported (likely OpenSSL 3.0.x or 3.1.x). Removing from config."
+            sed -i 's/"__DOCS__"//g' Configurations/99-win-hybridcrt.conf
+          fi
 
       - name: Compile and Stage Windows Binaries
         if: matrix.platform.label == 'Windows'
