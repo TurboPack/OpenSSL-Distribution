@@ -369,8 +369,12 @@ jobs:
         if: matrix.platform.label == 'Windows'
         shell: cmd
         run: |
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.platform.vcvars }}
+          :: Dynamically locate the latest Visual Studio installation path
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set "VS_PATH=%%i"
           
+          :: Call vcvarsall.bat using the dynamically discovered path
+          call "%VS_PATH%\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.platform.vcvars }}
+                    
           set "INSTALL_TEMP=%GITHUB_WORKSPACE%\temp_install"
           :: Use the original raw_artifact\dist path so it matches POSIX perfectly
           set "STAGED=%GITHUB_WORKSPACE%\raw_artifact\dist"
